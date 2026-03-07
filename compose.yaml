@@ -1,4 +1,19 @@
 ﻿services:
+  rabbitmq:
+    image: rabbitmq:4-management
+    hostname: rabbitmq
+    volumes:
+      - ./rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
+      - ./rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   hashprocessing.api:
     image: hashprocessing.api
     build:
@@ -10,11 +25,15 @@
       - ASPNETCORE_HTTPS_PORTS=8081
       - ASPNETCORE_Kestrel__Certificates__Default__Path=/https/hashprocessing.api.pfx
       - ASPNETCORE_Kestrel__Certificates__Default__Password=${HTTPS_CERT_PASSWORD:-devpassword}
+      - RabbitMQ__HostName=rabbitmq
     volumes:
       - ./.aspnet/https:/https:ro
     ports:
       - "8080:8080"
       - "8081:8081"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
 
   hashprocessing.worker:
     image: hashprocessing.worker
@@ -23,4 +42,8 @@
       dockerfile: Dockerfile
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
+      - RabbitMQ__HostName=rabbitmq
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
 

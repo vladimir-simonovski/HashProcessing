@@ -45,6 +45,8 @@ POST /hashes → GenerateHashesCommandHandler
   → 202 Accepted
 ```
 
+RabbitMQ topology (queues, exchanges, bindings) is defined declaratively in [rabbitmq/definitions.json](rabbitmq/definitions.json) and loaded automatically on container startup via [rabbitmq/rabbitmq.conf](rabbitmq/rabbitmq.conf).
+
 ## Getting started
 
 ### Prerequisites
@@ -118,8 +120,11 @@ Tests use **xUnit** with **NSubstitute** for mocking. Current coverage includes 
 
 ```text
 HashProcessing/
-├── compose.yaml                         # Docker Compose (API + Worker)
+├── compose.yaml                         # Docker Compose (API + Worker + RabbitMQ)
 ├── global.json                          # .NET SDK version pinning
+├── rabbitmq/
+│   ├── definitions.json                 # RabbitMQ topology (queues, exchanges, bindings)
+│   └── rabbitmq.conf                    # RabbitMQ config — loads definitions on startup
 ├── scripts/
 │   └── setup-dev-https.sh               # HTTPS certificate generation + trust
 ├── src/

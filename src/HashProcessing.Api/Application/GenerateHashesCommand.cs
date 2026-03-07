@@ -26,7 +26,7 @@ public class GenerateHashesCommandHandler(
     
     public async Task HandleAsync(GenerateHashesCommand command, CancellationToken cancellationToken)
     {
-        var hashes = _generator.StreamSha1s(command.Count);
+        var hashes = _generator.StreamSha1s(command.Count, cancellationToken);
         var result = await _processor.ProcessAsync(hashes, ct: cancellationToken);
         
         if (result.StreamedCount < command.Count)
