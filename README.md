@@ -54,12 +54,14 @@ POST /hashes → GenerateHashesCommandHandler
 
 ### Run with Docker (recommended)
 
-1. Generate a local HTTPS development certificate:
+1. Generate and trust a local HTTPS development certificate:
 
    ```bash
    chmod +x scripts/setup-dev-https.sh
    ./scripts/setup-dev-https.sh
    ```
+
+   The script generates an ASP.NET Core dev certificate, exports it as a PFX for Docker, and trusts it on your machine (may prompt for your password on macOS).
 
 2. Start both services:
 
@@ -77,7 +79,7 @@ POST /hashes → GenerateHashesCommandHandler
 
 > [!NOTE]
 > Override the certificate password by setting `HTTPS_CERT_PASSWORD` before running the setup script.
-> If your browser does not trust the local cert, run `dotnet dev-certs https --trust` (macOS/Windows).
+> If your browser still shows a certificate warning after running the script, try a private/incognito window or clear the browser's cached certificates.
 
 ### Run without Docker
 
@@ -119,18 +121,18 @@ HashProcessing/
 ├── compose.yaml                         # Docker Compose (API + Worker)
 ├── global.json                          # .NET SDK version pinning
 ├── scripts/
-│   └── setup-dev-https.sh               # HTTPS certificate generation
+│   └── setup-dev-https.sh               # HTTPS certificate generation + trust
 ├── src/
 │   ├── HashProcessing.Api/
 │   │   ├── Program.cs                   # Host builder, endpoints, middleware
-│   │   ├── Dockerfile                   # Multi-stage build → ASP.NET 8.0
+│   │   ├── Dockerfile                   # Multi-stage build → Alpine ASP.NET 8.0
 │   │   ├── Application/                 # CQRS command + handler, DI
 │   │   ├── Core/                        # Domain: Sha1Hash, interfaces
 │   │   └── Infrastructure/              # RabbitMQ processor, hash generators
 │   └── HashProcessing.Worker/
 │       ├── Program.cs                   # Host builder
 │       ├── Worker.cs                    # BackgroundService consumer
-│       └── Dockerfile                   # Multi-stage build → .NET 8.0
+│       └── Dockerfile                   # Multi-stage build → Alpine .NET Runtime 8.0
 └── tests/
     └── HashProcessing.Api.UnitTests/    # xUnit + NSubstitute
 ```
@@ -143,5 +145,5 @@ HashProcessing/
 | Messaging | RabbitMQ (`RabbitMQ.Client` 7.x) |
 | Concurrency | `System.Threading.Channels`, `Parallel.ForAsync` |
 | API docs | OpenAPI / Swashbuckle |
-| Containers | Docker multi-stage builds, Docker Compose |
+| Containers | Docker multi-stage Alpine builds, Docker Compose |
 | Testing | xUnit, NSubstitute, coverlet |

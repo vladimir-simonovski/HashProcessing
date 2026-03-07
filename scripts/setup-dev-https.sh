@@ -19,5 +19,7 @@ dotnet dev-certs https > /dev/null
 echo "Exporting certificate to $CERT_PATH"
 dotnet dev-certs https -ep "$CERT_PATH" -p "$CERT_PASSWORD" > /dev/null
 
-echo "Done. Certificate exported for Docker Compose."
-echo "If your browser warns locally, trust cert with: dotnet dev-certs https --trust"
+echo "Trusting the development certificate..."
+dotnet dev-certs https --trust
+
+echo "Done. Certificate exported and trusted for Docker Compose."

@@ -23,3 +23,18 @@
 **/values.dev.yaml
 LICENSE
 README.md
+
+# Project-specific exclusions
+.venv/
+tests/
+scripts/
+.aspnet/
+.github/
+.DS_Store
+**/.DS_Store
+*.pdf
+*.sln
+*.sln.DotSettings.user
+global.json
+compose.yaml
+Code Challenge*/
