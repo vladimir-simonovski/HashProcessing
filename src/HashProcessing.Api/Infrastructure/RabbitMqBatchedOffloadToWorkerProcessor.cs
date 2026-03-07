@@ -39,9 +39,9 @@ public class RabbitMqBatchedOffloadToWorkerProcessor : IHashProcessor
     public async Task<ProcessResult> ProcessAsync<THash>(
         ChannelReader<THash> hashChannelReader,
         CancellationToken ct = default)
-        where THash : IHash
+        where THash : IGeneratedHash
     {
-        var batchChannel = Channel.CreateBounded<IHash[]>(
+        var batchChannel = Channel.CreateBounded<IGeneratedHash[]>(
             new BoundedChannelOptions(_channelCapacity)
             {
                 SingleWriter = true,
@@ -69,8 +69,8 @@ public class RabbitMqBatchedOffloadToWorkerProcessor : IHashProcessor
 
     private TaskCompletionSource<uint> StartBatchChannelStreaming<THash>(
         ChannelReader<THash> hashChannelReader,
-        ChannelWriter<IHash[]> batchChannelWriter,
-        CancellationToken ct) where THash : IHash
+        ChannelWriter<IGeneratedHash[]> batchChannelWriter,
+        CancellationToken ct) where THash : IGeneratedHash
     {
         var tcsStreaming = new TaskCompletionSource<uint>();
 
@@ -80,7 +80,7 @@ public class RabbitMqBatchedOffloadToWorkerProcessor : IHashProcessor
 
             try
             {
-                var batch = new List<IHash>(_batchSize);
+                var batch = new List<IGeneratedHash>(_batchSize);
 
                 while (await hashChannelReader.WaitToReadAsync(ct))
                 {
@@ -119,7 +119,7 @@ public class RabbitMqBatchedOffloadToWorkerProcessor : IHashProcessor
     }
 
     private async Task<uint> PublishAsync(
-        ChannelReader<IHash[]> batchChannelReader,
+        ChannelReader<IGeneratedHash[]> batchChannelReader,
         CancellationToken ct)
     {
         await using var connection = await _connectionFactory.CreateConnectionAsync(ct);

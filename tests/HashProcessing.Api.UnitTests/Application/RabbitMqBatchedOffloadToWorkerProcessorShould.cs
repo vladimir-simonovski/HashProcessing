@@ -37,13 +37,13 @@ public class RabbitMqBatchedOffloadToWorkerProcessorShould
         var hashes = Enumerable.Range(0, 1000)
             .Select(i =>
             {
-                var hash = Substitute.For<IHash>();
+                var hash = Substitute.For<IGeneratedHash>();
                 hash.Value.Returns($"Hash{i}");
                 return hash;
             })
             .ToList();
 
-        var hashChannel = Channel.CreateUnbounded<IHash>();
+        var hashChannel = Channel.CreateUnbounded<IGeneratedHash>();
         foreach (var hash in hashes)
             await hashChannel.Writer.WriteAsync(hash);
         hashChannel.Writer.Complete();
