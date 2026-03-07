@@ -1,24 +1,20 @@
+using HashProcessing.Worker.Infrastructure;
+
 namespace HashProcessing.Worker;
 
-public class Worker : BackgroundService
+public class Worker(RabbitMqHashConsumer consumer, ILogger<Worker> logger) : BackgroundService
 {
-    private readonly ILogger<Worker> _logger;
-
-    public Worker(ILogger<Worker> logger)
-    {
-        _logger = logger;
-    }
+    private readonly RabbitMqHashConsumer _consumer = consumer ?? throw new ArgumentNullException(nameof(consumer));
+    private readonly ILogger<Worker> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    private const int DegreeOfParallelism = 4;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        while (!stoppingToken.IsCancellationRequested)
-        {
-            if (_logger.IsEnabled(LogLevel.Information))
-            {
-                _logger.LogInformation("Worker running at: {time}", DateTimeOffset.Now);
-            }
+        _logger.LogInformation("Starting {Count} parallel consumers", DegreeOfParallelism);
 
-            await Task.Delay(1000, stoppingToken);
-        }
+        var tasks = Enumerable.Range(1, DegreeOfParallelism)
+            .Select(id => _consumer.ConsumeAsync(id, stoppingToken));
+
+        await Task.WhenAll(tasks);
     }
 }

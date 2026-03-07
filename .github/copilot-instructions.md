@@ -14,6 +14,9 @@
 - **Infrastructure** contains concrete implementations and third-party integrations. Depends on Core.
 - Register services via `ServiceCollectionExtensions` classes — one per layer (`Application`, `Infrastructure`).
 
+## Dependencies
+- When adding NuGet packages, always choose the latest version compatible with the target .NET version (currently .NET 8.0). Do not install major versions that require a newer runtime (e.g., avoid EF Core 9.x / Pomelo 9.x on a .NET 8 project).
+
 ## Conventions
 - Guard constructor arguments against null/empty/invalid values.
 - Use `System.Threading.Channels` for streaming data between producer and consumer stages.

@@ -1,10 +1,11 @@
 ﻿FROM mcr.microsoft.com/dotnet/sdk:8.0-alpine AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
-COPY ["HashProcessing.Api.csproj", "."]
-RUN dotnet restore "HashProcessing.Api.csproj"
+COPY ["HashProcessing.Api/HashProcessing.Api.csproj", "HashProcessing.Api/"]
+COPY ["HashProcessing.Contracts/HashProcessing.Contracts.csproj", "HashProcessing.Contracts/"]
+RUN dotnet restore "HashProcessing.Api/HashProcessing.Api.csproj"
 COPY . .
-WORKDIR /src
+WORKDIR /src/HashProcessing.Api
 RUN dotnet publish "./HashProcessing.Api.csproj" -c $BUILD_CONFIGURATION -o /app/publish \
     /p:UseAppHost=false
 

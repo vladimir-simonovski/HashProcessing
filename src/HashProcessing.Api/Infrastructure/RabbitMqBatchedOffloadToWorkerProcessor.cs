@@ -142,8 +142,8 @@ public class RabbitMqBatchedOffloadToWorkerProcessor : IHashProcessor
 
         await foreach (var batch in batchChannelReader.ReadAllAsync(ct))
         {
-            var hashValues = batch.Select(h => h.Value).ToArray();
-            var messageBody = JsonSerializer.SerializeToUtf8Bytes(hashValues);
+            var hashBatchMessage = batch.ToHashBatchMessage();
+            var messageBody = JsonSerializer.SerializeToUtf8Bytes(hashBatchMessage);
 
             await channel.BasicPublishAsync(
                 exchange: string.Empty,

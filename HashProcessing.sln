@@ -15,6 +15,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{07ED8BFF
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HashProcessing.Api.UnitTests", "tests\HashProcessing.Api.UnitTests\HashProcessing.Api.UnitTests.csproj", "{A81A82BA-0F27-4A39-A361-59282B330426}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HashProcessing.Contracts", "src\HashProcessing.Contracts\HashProcessing.Contracts.csproj", "{BC01D29D-A5F3-4DCE-A718-97CCC052240E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -33,10 +35,15 @@ Global
 		{A81A82BA-0F27-4A39-A361-59282B330426}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A81A82BA-0F27-4A39-A361-59282B330426}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A81A82BA-0F27-4A39-A361-59282B330426}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BC01D29D-A5F3-4DCE-A718-97CCC052240E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BC01D29D-A5F3-4DCE-A718-97CCC052240E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BC01D29D-A5F3-4DCE-A718-97CCC052240E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BC01D29D-A5F3-4DCE-A718-97CCC052240E}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{8005ACB0-4FA9-48BD-88A4-1B9D4C488FC8} = {A59DDADD-9D43-477F-8434-47B95BCFC4C0}
 		{D2312156-1681-420E-A1DD-C036F06D2D1B} = {A59DDADD-9D43-477F-8434-47B95BCFC4C0}
 		{A81A82BA-0F27-4A39-A361-59282B330426} = {07ED8BFF-FB86-49B1-891C-1DB319898911}
+		{BC01D29D-A5F3-4DCE-A718-97CCC052240E} = {A59DDADD-9D43-477F-8434-47B95BCFC4C0}
 	EndGlobalSection
 EndGlobal

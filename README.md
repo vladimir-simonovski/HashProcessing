@@ -9,13 +9,16 @@ A distributed SHA-1 hash generation and processing pipeline built with .NET 8, R
 HashProcessing is a two-service system designed for high-throughput hash generation and processing:
 
 - **API** — ASP.NET Core Minimal API that generates SHA-1 hashes using `System.Security.Cryptography`, streams them through a bounded `Channel<T>`, batches them, and publishes to RabbitMQ.
-- **Worker** — Background service that consumes hash batches from RabbitMQ for downstream processing and persistence.
+- **Worker** — Background service that consumes hash batches from RabbitMQ using 4 parallel consumers, maps messages through an anti-corruption layer, and persists hashes to MariaDB via EF Core.
 
 ### Features
 
 - Streaming hash generation via `System.Threading.Channels` for backpressure-aware, non-blocking pipelines
 - Configurable parallel hash generation (`Parallel.ForAsync`) and parallel batch publishing
 - Batched RabbitMQ publishing with persistent delivery mode
+- 4-thread parallel RabbitMQ consumption with manual acknowledgement
+- Anti-corruption layer: contract messages (`HashBatchMessage`) mapped to domain entities (`HashEntity`) before persistence
+- MariaDB persistence via EF Core (Pomelo) with auto-migration on startup
 - Clean Architecture with DDD tactical patterns (value objects, domain service ports, CQRS command handlers)
 - Multi-stage Docker builds for both services
 - HTTPS-enabled local development with scripted certificate bootstrap
@@ -35,6 +38,13 @@ Core (Domain)  ←  Application  ←  Infrastructure
 | **Application** | Use-case handlers (CQRS) | `GenerateHashesCommand`, `GenerateHashesCommandHandler` |
 | **Infrastructure** | Concrete implementations | `DefaultHashGenerator`, `ParallelHashGenerator`, `RabbitMqBatchedOffloadToWorkerProcessor` |
 
+**Worker layers:**
+
+| Layer | Responsibility | Key types |
+|---|---|---|
+| **Core** | Domain entity, repository port | `HashEntity`, `IHashRepository` |
+| **Infrastructure** | EF Core persistence, RabbitMQ consumer, message mapper | `HashDbContext`, `HashRepository`, `RabbitMqHashConsumer`, `HashBatchMessageMapper` |
+
 **Processing pipeline:**
 
 ```
@@ -43,6 +53,12 @@ POST /hashes → GenerateHashesCommandHandler
   → IHashProcessor.ProcessAsync()       // batch + parallel publish
   → RabbitMQ queue "hash-processing"
   → 202 Accepted
+
+Worker (4 parallel consumers)
+  → RabbitMQ queue "hash-processing"
+  → HashBatchMessage (contract)          // anti-corruption layer
+  → HashEntity (domain)                  // mapper
+  → MariaDB hashes table                 // EF Core persistence
 ```
 
 RabbitMQ topology (queues, exchanges, bindings) is defined declaratively in [rabbitmq/definitions.json](rabbitmq/definitions.json) and loaded automatically on container startup via [rabbitmq/rabbitmq.conf](rabbitmq/rabbitmq.conf).
@@ -92,7 +108,7 @@ dotnet run --project src/HashProcessing.Api
 The API will be available at `http://localhost:5031` (and `https://localhost:7093`).
 
 > [!IMPORTANT]
-> A running RabbitMQ instance on `localhost` is required for hash processing to work outside Docker.
+> A running RabbitMQ instance and MariaDB instance on `localhost` are required for hash processing to work outside Docker.
 
 ## API
 
@@ -120,7 +136,7 @@ Tests use **xUnit** with **NSubstitute** for mocking. Current coverage includes 
 
 ```text
 HashProcessing/
-├── compose.yaml                         # Docker Compose (API + Worker + RabbitMQ)
+├── compose.yaml                         # Docker Compose (API + Worker + RabbitMQ + MariaDB)
 ├── global.json                          # .NET SDK version pinning
 ├── rabbitmq/
 │   ├── definitions.json                 # RabbitMQ topology (queues, exchanges, bindings)
@@ -135,9 +151,11 @@ HashProcessing/
 │   │   ├── Core/                        # Domain: Sha1Hash, interfaces
 │   │   └── Infrastructure/              # RabbitMQ processor, hash generators
 │   └── HashProcessing.Worker/
-│       ├── Program.cs                   # Host builder
-│       ├── Worker.cs                    # BackgroundService consumer
-│       └── Dockerfile                   # Multi-stage build → Alpine .NET Runtime 8.0
+│       ├── Program.cs                   # Host builder, auto-migration
+│       ├── Worker.cs                    # BackgroundService — 4 parallel consumers
+│       ├── Dockerfile                   # Multi-stage build → Alpine .NET Runtime 8.0
+│       ├── Core/                        # Domain: HashEntity, IHashRepository
+│       └── Infrastructure/              # EF Core DbContext, RabbitMQ consumer, mapper
 └── tests/
     └── HashProcessing.Api.UnitTests/    # xUnit + NSubstitute
 ```
@@ -147,6 +165,7 @@ HashProcessing/
 | Component | Technology |
 |---|---|
 | Framework | .NET 8 / ASP.NET Core Minimal API |
+| Database | MariaDB 11 (via Pomelo.EntityFrameworkCore.MySql 8.x) |
 | Messaging | RabbitMQ (`RabbitMQ.Client` 7.x) |
 | Concurrency | `System.Threading.Channels`, `Parallel.ForAsync` |
 | API docs | OpenAPI / Swashbuckle |
