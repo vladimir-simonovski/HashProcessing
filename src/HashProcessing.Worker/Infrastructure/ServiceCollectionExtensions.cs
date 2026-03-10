@@ -1,3 +1,4 @@
+using HashProcessing.Messaging;
 using HashProcessing.Worker.Core;
 using Microsoft.EntityFrameworkCore;
 using RabbitMQ.Client;
@@ -8,10 +9,11 @@ public static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
-        const string queueName = "hash-processing";
+        const string consumeQueueName = "hash-processing";
+        const string publishQueueName = "hash-daily-counts";
         var rabbitMqHost = configuration["RabbitMQ:HostName"] ?? "localhost";
         var connectionString = configuration.GetConnectionString("MariaDb")
-                               ?? "Server=localhost;Database=hashprocessing;User=root;Password=root;";
+                               ?? "Server=localhost;Database=worker;User=root;Password=root;";
 
         services.AddSingleton<IConnectionFactory>(_ => new ConnectionFactory
         {
@@ -24,11 +26,20 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IHashRepository, HashRepository>();
 
         services.AddSingleton(sp =>
+            sp.GetRequiredService<IConnectionFactory>().CreateConnectionAsync().GetAwaiter().GetResult());
+
+        services.AddScoped(sp =>
+            new RabbitMqPublisher(
+                sp.GetRequiredService<IConnection>(),
+                sp.GetRequiredService<ILogger<RabbitMqPublisher>>(),
+                publishQueueName));
+
+        services.AddSingleton(sp =>
             new RabbitMqHashConsumer(
                 sp.GetRequiredService<IConnectionFactory>(),
                 sp.GetRequiredService<IServiceScopeFactory>(),
                 sp.GetRequiredService<ILogger<RabbitMqHashConsumer>>(),
-                queueName));
+                consumeQueueName));
 
         return services;
     }

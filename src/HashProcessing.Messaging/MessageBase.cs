@@ -1,4 +1,4 @@
-namespace HashProcessing.Contracts;
+namespace HashProcessing.Messaging;
 
 public abstract record MessageBase
 {

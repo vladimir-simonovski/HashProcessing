@@ -1,4 +1,5 @@
 using HashProcessing.Worker.Core;
+using Microsoft.EntityFrameworkCore;
 
 namespace HashProcessing.Worker.Infrastructure;
 
@@ -11,4 +12,7 @@ public class HashRepository(HashDbContext db) : IHashRepository
         _db.Hashes.AddRange(entities);
         await _db.SaveChangesAsync(ct);
     }
+
+    public async Task<long> GetCountByDateAsync(DateOnly date, CancellationToken ct = default) 
+        => await _db.Hashes.CountAsync(h => h.Date == date, ct);
 }

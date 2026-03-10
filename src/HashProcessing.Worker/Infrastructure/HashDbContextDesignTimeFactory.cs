@@ -9,7 +9,7 @@ public class HashDbContextDesignTimeFactory : IDesignTimeDbContextFactory<HashDb
     {
         var optionsBuilder = new DbContextOptionsBuilder<HashDbContext>();
         optionsBuilder.UseMySql(
-            "Server=localhost;Database=hashprocessing;User=root;Password=root;",
+            "Server=localhost;Database=worker;User=root;Password=root;",
             new MariaDbServerVersion(new Version(11, 0)));
 
         return new HashDbContext(optionsBuilder.Options);

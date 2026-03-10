@@ -1,5 +1,5 @@
 using HashProcessing.Api.Core;
-using HashProcessing.Contracts;
+using HashProcessing.Messaging;
 
 namespace HashProcessing.Api.Infrastructure;
 

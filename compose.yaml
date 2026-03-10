@@ -18,7 +18,6 @@
     image: mariadb:11
     environment:
       - MARIADB_ROOT_PASSWORD=root
-      - MARIADB_DATABASE=hashprocessing
     ports:
       - "3306:3306"
     volumes:
@@ -41,6 +40,7 @@
       - ASPNETCORE_Kestrel__Certificates__Default__Path=/https/hashprocessing.api.pfx
       - ASPNETCORE_Kestrel__Certificates__Default__Password=${HTTPS_CERT_PASSWORD:-devpassword}
       - RabbitMQ__HostName=rabbitmq
+      - ConnectionStrings__MariaDb=Server=mariadb;Database=api;User=root;Password=root;
     volumes:
       - ./.aspnet/https:/https:ro
     ports:
@@ -48,6 +48,8 @@
       - "8081:8081"
     depends_on:
       rabbitmq:
+        condition: service_healthy
+      mariadb:
         condition: service_healthy
 
   hashprocessing.worker:
@@ -58,7 +60,7 @@
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - RabbitMQ__HostName=rabbitmq
-      - ConnectionStrings__MariaDb=Server=mariadb;Database=hashprocessing;User=root;Password=root;
+      - ConnectionStrings__MariaDb=Server=mariadb;Database=worker;User=root;Password=root;
     depends_on:
       rabbitmq:
         condition: service_healthy

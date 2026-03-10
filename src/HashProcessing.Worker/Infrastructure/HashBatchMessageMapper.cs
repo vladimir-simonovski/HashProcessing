@@ -1,4 +1,4 @@
-using HashProcessing.Contracts;
+using HashProcessing.Messaging;
 using HashProcessing.Worker.Core;
 
 namespace HashProcessing.Worker.Infrastructure;

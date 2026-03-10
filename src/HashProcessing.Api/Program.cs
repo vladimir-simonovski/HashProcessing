@@ -1,10 +1,9 @@
 using HashProcessing.Api.Application;
 using HashProcessing.Api.Infrastructure;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
@@ -14,7 +13,12 @@ builder.Services
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<ApiDbContext>();
+    await db.Database.MigrateAsync();
+}
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -22,26 +26,6 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-
-var summaries = new[]
-{
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
-
-app.MapGet("/weatherforecast", () =>
-    {
-        var forecast = Enumerable.Range(1, 5).Select(index =>
-                new WeatherForecast
-                (
-                    DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-                    Random.Shared.Next(-20, 55),
-                    summaries[Random.Shared.Next(summaries.Length)]
-                ))
-            .ToArray();
-        return forecast;
-    })
-    .WithName("GetWeatherForecast")
-    .WithOpenApi();
 
 app.MapPost("/hashes", async (HttpContext context) =>
     {
@@ -54,12 +38,24 @@ app.MapPost("/hashes", async (HttpContext context) =>
 
         return Results.Accepted();
     })
+    .WithName("PostHashes")
+    .WithOpenApi();
+
+app.MapGet("/hashes", async (HttpContext context) =>
+    {
+        var handler = context
+            .RequestServices
+            .GetRequiredService<GetHashesQueryHandler>();
+
+        var result = await handler.HandleAsync(context.RequestAborted);
+        return Results.Ok(result);
+    })
     .WithName("GetHashes")
     .WithOpenApi();
 
 app.Run();
 
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
+namespace HashProcessing.Api
 {
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
+    public partial class Program { }   
 }

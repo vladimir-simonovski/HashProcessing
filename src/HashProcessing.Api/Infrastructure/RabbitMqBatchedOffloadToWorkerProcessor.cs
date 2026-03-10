@@ -55,10 +55,11 @@ public class RabbitMqBatchedOffloadToWorkerProcessor : IHashProcessor
                 batchChannel.Writer,
                 ct);
 
+        await using var connection = await _connectionFactory.CreateConnectionAsync(ct);
         var publishingTasks = new List<Task<uint>>(_degreeOfParallelism);
-
+        
         for (var i = 0; i < _degreeOfParallelism; i++)
-            publishingTasks.Add(PublishAsync(batchChannel.Reader, ct));
+            publishingTasks.Add(PublishAsync(connection, batchChannel.Reader, ct));
 
         var publishResults = await Task.WhenAll(publishingTasks);
 
@@ -119,10 +120,10 @@ public class RabbitMqBatchedOffloadToWorkerProcessor : IHashProcessor
     }
 
     private async Task<uint> PublishAsync(
+        IConnection connection,
         ChannelReader<IGeneratedHash[]> batchChannelReader,
         CancellationToken ct)
     {
-        await using var connection = await _connectionFactory.CreateConnectionAsync(ct);
         await using var channel = await connection.CreateChannelAsync(cancellationToken: ct);
 
         await channel.QueueDeclareAsync(
@@ -153,7 +154,7 @@ public class RabbitMqBatchedOffloadToWorkerProcessor : IHashProcessor
                 body: messageBody,
                 cancellationToken: ct);
 
-            publishedCount += (uint)batch.Length;
+            Interlocked.Add(ref publishedCount, (uint)batch.Length);
         }
 
         return publishedCount;

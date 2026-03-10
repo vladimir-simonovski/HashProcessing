@@ -2,7 +2,7 @@
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
 COPY ["HashProcessing.Api/HashProcessing.Api.csproj", "HashProcessing.Api/"]
-COPY ["HashProcessing.Contracts/HashProcessing.Contracts.csproj", "HashProcessing.Contracts/"]
+COPY ["HashProcessing.Messaging/HashProcessing.Messaging.csproj", "HashProcessing.Messaging/"]
 RUN dotnet restore "HashProcessing.Api/HashProcessing.Api.csproj"
 COPY . .
 WORKDIR /src/HashProcessing.Api
