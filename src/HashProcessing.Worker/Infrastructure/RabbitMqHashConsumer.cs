@@ -1,6 +1,5 @@
 using HashProcessing.Messaging;
 using HashProcessing.Worker.Application;
-using Microsoft.Extensions.DependencyInjection;
 using RabbitMQ.Client;
 
 namespace HashProcessing.Worker.Infrastructure;

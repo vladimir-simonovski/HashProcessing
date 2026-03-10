@@ -1,6 +1,6 @@
-using System.Text.Json;
 using System.Threading.Channels;
 using HashProcessing.Api.Core;
+using HashProcessing.Messaging;
 using RabbitMQ.Client;
 using static HashProcessing.Api.Infrastructure.Util;
 
@@ -9,6 +9,7 @@ namespace HashProcessing.Api.Infrastructure;
 public class RabbitMqBatchedOffloadToWorkerProcessor : IHashProcessor
 {
     private readonly IConnectionFactory _connectionFactory;
+    private readonly ILoggerFactory _loggerFactory;
     private readonly ushort _degreeOfParallelism;
     private readonly ushort _channelCapacity;
     private readonly ushort _batchSize;
@@ -16,13 +17,15 @@ public class RabbitMqBatchedOffloadToWorkerProcessor : IHashProcessor
 
     public RabbitMqBatchedOffloadToWorkerProcessor(
         IConnectionFactory connectionFactory,
+        ILoggerFactory loggerFactory,
         ushort degreeOfParallelism,
         ushort batchSize,
         string queueName,
         Func<ushort, ushort>? channelCapacitySelector = null)
     {
         _connectionFactory = connectionFactory ?? throw new ArgumentNullException(nameof(connectionFactory));
-
+        _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
+        
         _degreeOfParallelism = EnsureDegreeOfParallelism(degreeOfParallelism);
 
         var requestedCapacity =
@@ -59,7 +62,7 @@ public class RabbitMqBatchedOffloadToWorkerProcessor : IHashProcessor
         var publishingTasks = new List<Task<uint>>(_degreeOfParallelism);
         
         for (var i = 0; i < _degreeOfParallelism; i++)
-            publishingTasks.Add(PublishAsync(connection, batchChannel.Reader, ct));
+            publishingTasks.Add(PublishAsync(batchChannel.Reader, ct));
 
         var publishResults = await Task.WhenAll(publishingTasks);
 
@@ -120,39 +123,22 @@ public class RabbitMqBatchedOffloadToWorkerProcessor : IHashProcessor
     }
 
     private async Task<uint> PublishAsync(
-        IConnection connection,
         ChannelReader<IGeneratedHash[]> batchChannelReader,
         CancellationToken ct)
     {
-        await using var channel = await connection.CreateChannelAsync(cancellationToken: ct);
-
-        await channel.QueueDeclareAsync(
-            _queueName,
-            durable: true,
-            exclusive: false,
-            autoDelete: false,
-            cancellationToken: ct);
-
-        var properties = new BasicProperties
-        {
-            Persistent = true,
-            ContentType = "application/json"
-        };
+        await using var publisher = new RabbitMqPublisher(
+            await _connectionFactory.CreateConnectionAsync(ct),
+            _loggerFactory.CreateLogger<RabbitMqPublisher>(),
+            _queueName
+        );
 
         var publishedCount = 0u;
 
         await foreach (var batch in batchChannelReader.ReadAllAsync(ct))
         {
             var hashBatchMessage = batch.ToHashBatchMessage();
-            var messageBody = JsonSerializer.SerializeToUtf8Bytes(hashBatchMessage);
 
-            await channel.BasicPublishAsync(
-                exchange: string.Empty,
-                routingKey: _queueName,
-                mandatory: false,
-                basicProperties: properties,
-                body: messageBody,
-                cancellationToken: ct);
+            await publisher.PublishAsync(hashBatchMessage, ct);
 
             Interlocked.Add(ref publishedCount, (uint)batch.Length);
         }

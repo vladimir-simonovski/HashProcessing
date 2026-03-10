@@ -1,6 +1,7 @@
 using System.Threading.Channels;
 using HashProcessing.Api.Core;
 using HashProcessing.Api.Infrastructure;
+using Microsoft.Extensions.Logging;
 using NSubstitute;
 using RabbitMQ.Client;
 
@@ -26,9 +27,12 @@ public class RabbitMqBatchedOffloadToWorkerProcessorShould
         var connectionFactory = Substitute.For<IConnectionFactory>();
         connectionFactory.CreateConnectionAsync(Arg.Any<CancellationToken>())
             .Returns(connection);
+        
+        var loggerFactory = Substitute.For<ILoggerFactory>();
 
         var processor = new RabbitMqBatchedOffloadToWorkerProcessor(
             connectionFactory,
+            loggerFactory,
             degreeOfParallelism: 2,
             batchSize: 100,
             queueName: "test-queue"

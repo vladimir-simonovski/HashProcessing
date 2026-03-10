@@ -34,6 +34,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IHashProcessor>(sp =>
             new RabbitMqBatchedOffloadToWorkerProcessor(
                 sp.GetRequiredService<IConnectionFactory>(),
+                sp.GetRequiredService<ILoggerFactory>(),
                 degreeOfParallelism,
                 batchSize,
                 publishQueueName));
