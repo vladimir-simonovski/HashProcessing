@@ -20,7 +20,10 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<IConnectionFactory>(_ => new ConnectionFactory
         {
-            HostName = rabbitMqHost
+            HostName = rabbitMqHost,
+            AutomaticRecoveryEnabled = true,
+            TopologyRecoveryEnabled = true,
+            NetworkRecoveryInterval = TimeSpan.FromSeconds(5)
         });
 
         services.AddDbContext<ApiDbContext>(options =>

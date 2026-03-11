@@ -1,6 +1,10 @@
+using System.Net.Sockets;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Polly;
+using Polly.Retry;
 using RabbitMQ.Client;
+using RabbitMQ.Client.Exceptions;
 
 namespace HashProcessing.Messaging;
 
@@ -16,22 +20,31 @@ public class RabbitMqPublisher(
         : throw new ArgumentException("Queue name must not be null or whitespace.", nameof(queueName));
     private IChannel? _channel;
 
+    private readonly ResiliencePipeline _retryPipeline = new ResiliencePipelineBuilder()
+        .AddRetry(new RetryStrategyOptions
+        {
+            MaxRetryAttempts = 3,
+            BackoffType = DelayBackoffType.Exponential,
+            Delay = TimeSpan.FromMilliseconds(200),
+            ShouldHandle = new PredicateBuilder()
+                .Handle<AlreadyClosedException>()
+                .Handle<BrokerUnreachableException>()
+                .Handle<IOException>()
+                .Handle<SocketException>(),
+            OnRetry = args =>
+            {
+                logger.LogWarning(args.Outcome.Exception,
+                    "Publish attempt {AttemptNumber} to queue '{QueueName}' failed, retrying",
+                    args.AttemptNumber, queueName);
+                return ValueTask.CompletedTask;
+            }
+        })
+        .Build();
+
     public async Task PublishAsync<TMessage>(TMessage message, CancellationToken ct = default)
         where TMessage : MessageBase
     {
         ArgumentNullException.ThrowIfNull(message);
-
-        if (_channel is null)
-        {
-            _channel = await _connection.CreateChannelAsync(cancellationToken: ct);
-
-            await _channel.QueueDeclareAsync(
-                _queueName,
-                durable: true,
-                exclusive: false,
-                autoDelete: false,
-                cancellationToken: ct);
-        }
 
         var properties = new BasicProperties
         {
@@ -41,21 +54,56 @@ public class RabbitMqPublisher(
 
         var body = JsonSerializer.SerializeToUtf8Bytes(message);
 
-        await _channel.BasicPublishAsync(
-            exchange: string.Empty,
-            routingKey: _queueName,
-            mandatory: false,
-            basicProperties: properties,
-            body: body,
-            cancellationToken: ct);
+        await _retryPipeline.ExecuteAsync(async (CancellationToken token) =>
+        {
+            var channel = await GetOrCreateChannelAsync(token);
+
+            await channel.BasicPublishAsync(
+                exchange: string.Empty,
+                routingKey: _queueName,
+                mandatory: false,
+                basicProperties: properties,
+                body: body,
+                cancellationToken: token);
+        }, ct);
 
         _logger.LogDebug("Published {MessageType} to queue '{QueueName}'", typeof(TMessage).Name, _queueName);
+    }
+
+    private async Task<IChannel> GetOrCreateChannelAsync(CancellationToken ct)
+    {
+        if (_channel is { IsOpen: true })
+            return _channel;
+
+        if (_channel is not null)
+        {
+            try { await _channel.DisposeAsync(); }
+            catch { /* channel already dead */ }
+        }
+
+        _channel = await _connection.CreateChannelAsync(
+            new CreateChannelOptions(
+                publisherConfirmationsEnabled: true,
+                publisherConfirmationTrackingEnabled: true),
+            cancellationToken: ct);
+
+        await _channel.QueueDeclareAsync(
+            _queueName,
+            durable: true,
+            exclusive: false,
+            autoDelete: false,
+            cancellationToken: ct);
+
+        return _channel;
     }
 
     public async ValueTask DisposeAsync()
     {
         if (_channel is not null)
+        {
             await _channel.DisposeAsync();
+            _channel = null;
+        }
 
         GC.SuppressFinalize(this);
     }

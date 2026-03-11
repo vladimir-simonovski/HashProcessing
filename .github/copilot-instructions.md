@@ -17,6 +17,7 @@
 
 ## Dependencies
 - When adding NuGet packages, always choose the latest version compatible with the target .NET version (currently .NET 8.0). Do not install major versions that require a newer runtime (e.g., avoid EF Core 9.x / Pomelo 9.x on a .NET 8 project).
+- Always pin NuGet package versions to a specific version number (e.g., `8.10.0`), never use floating versions (e.g., `8.*`). This ensures reproducible builds and prevents unexpected breaking changes from automatic version resolution.
 
 ## Conventions
 - Guard constructor arguments against null/empty/invalid values.

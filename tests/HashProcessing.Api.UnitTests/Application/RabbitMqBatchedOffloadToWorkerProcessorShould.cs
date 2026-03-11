@@ -14,6 +14,7 @@ public class RabbitMqBatchedOffloadToWorkerProcessorShould
     {
         // Arrange
         var rabbitMqChannel = Substitute.For<IChannel>();
+        rabbitMqChannel.IsOpen.Returns(true);
         rabbitMqChannel.QueueDeclareAsync(
                 Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<bool>(), Arg.Any<bool>(),
                 Arg.Any<IDictionary<string, object?>>(), Arg.Any<bool>(), Arg.Any<bool>(),
