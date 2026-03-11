@@ -132,6 +132,40 @@ dotnet test
 
 Tests use **xUnit** with **NSubstitute** for mocking. Current coverage includes the `RabbitMqBatchedOffloadToWorkerProcessor` batch-and-publish pipeline.
 
+## Benchmarks
+
+Performance benchmarks use [BenchmarkDotNet](https://benchmarkdotnet.org/) with Testcontainers for real RabbitMQ infrastructure. Docker must be running for pipeline benchmarks.
+
+### Available benchmarks
+
+| Benchmark | What it measures | Docker required |
+|---|---|---|
+| `HashGeneratorIsolatedBenchmark` | Raw hash generation throughput: `DefaultHashGenerator` vs `ParallelHashGenerator` across 100–100K hashes | No |
+| `HashGenerationPipelineBenchmark` | End-to-end generate → batch → publish through real `RabbitMqBatchedOffloadToWorkerProcessor` against a Testcontainers RabbitMQ instance (1K–100K hashes) | Yes |
+| `ParallelDegreeOfParallelismBenchmark` | Optimal `ParallelHashGenerator` degree of parallelism (1, 2, 4, 8, ProcessorCount) at 40K hashes with real RabbitMQ | Yes |
+| `BatchSizeBenchmark` | Optimal RabbitMQ publish batch size (10–40K) at 1M hashes with real RabbitMQ | Yes |
+
+### Running benchmarks
+
+```bash
+# Run all benchmarks
+dotnet run -c Release --project tests/HashProcessing.Benchmarks
+
+# Run only the isolated (no Docker) benchmark
+dotnet run -c Release --project tests/HashProcessing.Benchmarks -- --filter *Isolated*
+
+# Run only the pipeline benchmark
+dotnet run -c Release --project tests/HashProcessing.Benchmarks -- --filter *Pipeline*
+
+# Run only the batch size benchmark
+dotnet run -c Release --project tests/HashProcessing.Benchmarks -- --filter *BatchSize*
+
+# Quick validation (dry run, no actual measurement)
+dotnet run -c Release --project tests/HashProcessing.Benchmarks -- --job dry
+```
+
+Results are written to `tests/HashProcessing.Benchmarks/BenchmarkDotNet.Artifacts/`.
+
 ## Project structure
 
 ```text
@@ -157,7 +191,9 @@ HashProcessing/
 │       ├── Core/                        # Domain: HashEntity, IHashRepository
 │       └── Infrastructure/              # EF Core DbContext, RabbitMQ consumer, mapper
 └── tests/
-    └── HashProcessing.Api.UnitTests/    # xUnit + NSubstitute
+    ├── HashProcessing.Api.UnitTests/    # xUnit + NSubstitute
+    ├── HashProcessing.Benchmarks/       # BenchmarkDotNet + Testcontainers
+    └── HashProcessing.IntegrationTests/ # xUnit + Testcontainers
 ```
 
 ## Tech stack
@@ -171,3 +207,4 @@ HashProcessing/
 | API docs | OpenAPI / Swashbuckle |
 | Containers | Docker multi-stage Alpine builds, Docker Compose |
 | Testing | xUnit, NSubstitute, coverlet |
+| Benchmarking | BenchmarkDotNet, Testcontainers |

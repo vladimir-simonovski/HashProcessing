@@ -30,3 +30,4 @@
 ## Documentation
 - Always keep documentation in markdown files clear, concise, and purely technical. Avoid including any personal opinions or subjective statements in the documentation.
 - Always keep [README.md](README.md) up to date and update it whenever you add new features or make significant changes to the project.
+- After running benchmarks, update [tests/HashProcessing.Benchmarks/BENCHMARK-RESULTS.md](tests/HashProcessing.Benchmarks/BENCHMARK-RESULTS.md) with any new or changed results. Keep the format consistent with existing sections.
