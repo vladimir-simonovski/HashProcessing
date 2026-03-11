@@ -3,7 +3,7 @@ using Testcontainers.RabbitMq;
 
 namespace HashProcessing.IntegrationTests;
 
-public abstract class IntegrationTestFixture : IAsyncLifetime
+public class IntegrationTestFixture : IAsyncLifetime
 {
     private readonly MariaDbContainer _mariaDb = new MariaDbBuilder()
         .WithImage("mariadb:11")

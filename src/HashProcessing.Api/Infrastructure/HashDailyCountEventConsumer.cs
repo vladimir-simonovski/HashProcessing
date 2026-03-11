@@ -9,14 +9,15 @@ public class HashDailyCountEventConsumer(
     IServiceScopeFactory scopeFactory,
     ILogger<HashDailyCountEventConsumer> logger,
     string queueName)
-    : RabbitMqConsumer<HashDailyCountMessage>(connectionFactory, scopeFactory, logger, queueName)
+    : RabbitMqConsumer<HashDailyCountMessage>(connectionFactory, logger, queueName)
 {
     protected override async Task HandleMessageAsync(
         HashDailyCountMessage message,
-        IServiceScope scope,
         CancellationToken ct)
     {
+        await using var scope = scopeFactory.CreateAsyncScope();
         var handler = scope.ServiceProvider.GetRequiredService<UpsertHashDailyCountCommandHandler>();
+
         await handler.HandleAsync(new UpsertHashDailyCountCommand(message.Date, message.Count), ct);
     }
 }

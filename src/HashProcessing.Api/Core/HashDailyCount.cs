@@ -2,6 +2,7 @@ namespace HashProcessing.Api.Core;
 
 public class HashDailyCount
 {
+    // ReSharper disable once UnusedMember.Local
     private HashDailyCount() { } // EF Core
 
     public HashDailyCount(DateOnly date, long count)
@@ -14,10 +15,4 @@ public class HashDailyCount
 
     public DateOnly Date { get; private set; }
     public long Count { get; private set; }
-
-    public void UpdateCount(long count)
-    {
-        ArgumentOutOfRangeException.ThrowIfNegative(count);
-        Count = count;
-    }
 }

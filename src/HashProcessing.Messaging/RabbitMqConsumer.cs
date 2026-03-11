@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
@@ -9,20 +8,18 @@ namespace HashProcessing.Messaging;
 public abstract class RabbitMqConsumer<TMessage> where TMessage : MessageBase
 {
     private readonly IConnectionFactory _connectionFactory;
-    private readonly IServiceScopeFactory _scopeFactory;
+
     private readonly ILogger _logger;
     private readonly string _queueName;
     private readonly ushort _prefetchCount;
 
     protected RabbitMqConsumer(
         IConnectionFactory connectionFactory,
-        IServiceScopeFactory scopeFactory,
         ILogger logger,
         string queueName,
         ushort prefetchCount = 1)
     {
         _connectionFactory = connectionFactory ?? throw new ArgumentNullException(nameof(connectionFactory));
-        _scopeFactory = scopeFactory ?? throw new ArgumentNullException(nameof(scopeFactory));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
         ArgumentException.ThrowIfNullOrWhiteSpace(queueName);
@@ -32,7 +29,7 @@ public abstract class RabbitMqConsumer<TMessage> where TMessage : MessageBase
         _prefetchCount = prefetchCount;
     }
 
-    protected abstract Task HandleMessageAsync(TMessage message, IServiceScope scope, CancellationToken ct);
+    protected abstract Task HandleMessageAsync(TMessage message, CancellationToken ct);
 
     public async Task ConsumeAsync(int consumerId, CancellationToken ct)
     {
@@ -66,9 +63,8 @@ public abstract class RabbitMqConsumer<TMessage> where TMessage : MessageBase
                     await channel.BasicNackAsync(ea.DeliveryTag, multiple: false, requeue: false, cancellationToken: ct);
                     return;
                 }
-
-                await using var scope = _scopeFactory.CreateAsyncScope();
-                await HandleMessageAsync(message, scope, ct);
+                
+                await HandleMessageAsync(message, ct);
 
                 await channel.BasicAckAsync(ea.DeliveryTag, multiple: false, cancellationToken: ct);
                 _logger.LogDebug("Consumer {ConsumerId}: processed {MessageType}",

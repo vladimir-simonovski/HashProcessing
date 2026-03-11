@@ -10,6 +10,7 @@ public class HashDailyCountEventBackgroundService(
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _logger.LogInformation("Starting hash daily count event consumer");
-        await _consumer.ConsumeAsync(consumerId: 1, stoppingToken);
+
+        await _consumer.ConsumeAsync(1, stoppingToken);
     }
 }
