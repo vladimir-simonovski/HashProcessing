@@ -5,7 +5,15 @@ using Microsoft.EntityFrameworkCore;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
+    {
+        Title = "HashProcessing API",
+        Version = "v1",
+        Description = "API for generating SHA-1 hashes and retrieving daily hash count aggregations."
+    });
+});
 
 builder.Services
     .AddApplication()
@@ -27,19 +35,28 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-app.MapPost("/hashes", async (HttpContext context) =>
+app.MapPost("/hashes", async (uint? count, HttpContext context) =>
     {
         await context
             .RequestServices
             .GetRequiredService<GenerateHashesCommandHandler>()
             .HandleAsync(
-                new GenerateHashesCommand(),
+                new GenerateHashesCommand(count),
                 context.RequestAborted);
 
         return Results.Accepted();
     })
     .WithName("PostHashes")
-    .WithOpenApi();
+    .WithDescription("Generates SHA-1 hashes and publishes them to the processing pipeline via RabbitMQ. Defaults to 40,000 hashes if count is not specified.")
+    .WithSummary("Generate SHA-1 hashes")
+    .WithTags("Hashes")
+    .Produces(StatusCodes.Status202Accepted)
+    .Produces(StatusCodes.Status400BadRequest)
+    .WithOpenApi(operation =>
+    {
+        operation.Parameters[0].Description = "Number of SHA-1 hashes to generate. Must be greater than zero. Defaults to 40,000.";
+        return operation;
+    });
 
 app.MapGet("/hashes", async (HttpContext context) =>
     {
@@ -51,6 +68,10 @@ app.MapGet("/hashes", async (HttpContext context) =>
         return Results.Ok(result);
     })
     .WithName("GetHashes")
+    .WithDescription("Returns the aggregated daily hash counts, ordered by date descending.")
+    .WithSummary("Get daily hash counts")
+    .WithTags("Hashes")
+    .Produces<HashesResponse>()
     .WithOpenApi();
 
 app.Run();

@@ -6,12 +6,12 @@ public class GenerateHashesCommand
 {
     public uint Count { get; }
     
-    public GenerateHashesCommand(uint count = 40_000)
+    public GenerateHashesCommand(uint? count = null)
     {
         if (count == 0)
             throw new ArgumentException("Count must be greater than zero.", nameof(count));
         
-        Count = count;
+        Count = count ?? 40_000;
     }
 }
 
