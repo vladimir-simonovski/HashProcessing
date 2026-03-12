@@ -17,7 +17,7 @@ public class HashDailyCountRepository(ApiDbContext db) : IHashDailyCountReposito
     public async Task<IReadOnlyCollection<HashDailyCount>> GetAllAsync(CancellationToken ct = default)
     {
         return await _db.HashDailyCounts
-            .OrderBy(h => h.Date)
+            .OrderByDescending(h => h.Date)
             .AsNoTracking()
             .ToListAsync(ct);
     }
