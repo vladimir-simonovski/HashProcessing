@@ -1,6 +1,6 @@
 # HashProcessing
 
-A distributed SHA-1 hash generation and processing pipeline built with .NET 8, RabbitMQ, and Docker. The API generates hashes, batches them, and publishes to a message queue for parallel consumption by a background worker service.
+A distributed SHA-1 hash generation and processing pipeline built with .NET 8, RabbitMQ, and Docker. The API generates hashes, batches them, and publishes to a message queue for parallel consumption by a worker service, which persists them and publishes daily count aggregations back to the API.
 
 [Overview](#overview) · [Architecture](#architecture) · [Getting started](#getting-started) · [API](#api) · [Project structure](#project-structure)
 
@@ -8,8 +8,8 @@ A distributed SHA-1 hash generation and processing pipeline built with .NET 8, R
 
 HashProcessing is a two-service system designed for high-throughput hash generation and processing:
 
-- **API** — ASP.NET Core Minimal API that generates SHA-1 hashes using `System.Security.Cryptography`, streams them through a bounded `Channel<T>`, batches them, and publishes to RabbitMQ.
-- **Worker** — Background service that consumes hash batches from RabbitMQ using 4 parallel consumers, maps messages through an anti-corruption layer, and persists hashes to MariaDB via EF Core.
+- **API** — ASP.NET Core Minimal API that generates SHA-1 hashes using `System.Security.Cryptography`, streams them through a bounded `Channel<T>`, batches them, and publishes to RabbitMQ. Also consumes daily count aggregation events from the worker and exposes them via `GET /hashes`.
+- **Worker** — Background service that consumes hash batches from RabbitMQ using 4 parallel consumers, maps messages through an anti-corruption layer, persists hashes to MariaDB via EF Core, and publishes daily count aggregations back to the API via a dedicated queue.
 
 ### Features
 
@@ -18,13 +18,47 @@ HashProcessing is a two-service system designed for high-throughput hash generat
 - Batched RabbitMQ publishing with persistent delivery mode
 - 4-thread parallel RabbitMQ consumption with manual acknowledgement
 - Anti-corruption layer: contract messages (`HashBatchMessage`) mapped to domain entities (`HashEntity`) before persistence
-- MariaDB persistence via EF Core (Pomelo) with auto-migration on startup
-- Clean Architecture with DDD tactical patterns (value objects, domain service ports, CQRS command handlers)
+- Event-driven daily count aggregation: Worker publishes `HashDailyCountMessage` → API consumes and upserts counts
+- Shared `HashProcessing.Messaging` library with generic `RabbitMqPublisher` and `RabbitMqConsumer<T>` base types
+- MariaDB persistence via EF Core (Pomelo) with auto-migration on startup (separate databases for API and Worker)
+- Clean Architecture with minimal DDD tactical patterns (value objects, domain service ports, CQRS command handlers)
 - Multi-stage Docker builds for both services
 - HTTPS-enabled local development with scripted certificate bootstrap
 - OpenAPI/Swagger UI in development mode
 
 ## Architecture
+
+### System components
+
+```mermaid
+graph LR
+  Client([Client])
+
+  subgraph API ["HashProcessing.API"]
+    api["API<br/>ASP.NET Core"]
+    api_db[("MariaDB<br/>api DB")]
+  end
+
+  subgraph RMQ ["RabbitMQ"]
+    q1["hash-processing"]
+    q2["hash-daily-counts"]
+  end
+
+  subgraph Worker ["HashProcessing.Worker"]
+    worker["Worker<br/>4x consumers"]
+    worker_db[("MariaDB<br/>worker DB")]
+  end
+
+  Client -- "POST /hashes<br/>GET /hashes" --> api
+  api -- "HashBatchMessage" --> q1
+  q1 --> worker
+  worker --> worker_db
+  worker -- "HashDailyCountMessage" --> q2
+  q2 --> api
+  api --> api_db
+```
+
+### Layer dependency
 
 The solution follows **Clean Architecture** with inward-only dependency flow:
 
@@ -34,16 +68,17 @@ Core (Domain)  ←  Application  ←  Infrastructure
 
 | Layer | Responsibility | Key types |
 |---|---|---|
-| **Core** | Value objects, domain service ports | `Sha1Hash`, `IHash`, `IHashGenerator`, `IHashProcessor` |
-| **Application** | Use-case handlers (CQRS) | `GenerateHashesCommand`, `GenerateHashesCommandHandler` |
-| **Infrastructure** | Concrete implementations | `DefaultHashGenerator`, `ParallelHashGenerator`, `RabbitMqBatchedOffloadToWorkerProcessor` |
+| **Core** | Value objects, domain service ports | `Sha1Hash`, `IGeneratedHash`, `IHashGenerator`, `IHashProcessor`, `IHashDailyCountRepository`, `HashDailyCount` |
+| **Application** | Use-case handlers (CQRS) | `GenerateHashesCommand`, `GetHashesQuery`, `UpsertHashDailyCountCommand` + handlers |
+| **Infrastructure** | Concrete implementations, consumers | `DefaultHashGenerator`, `ParallelHashGenerator`, `RabbitMqBatchedOffloadToWorkerProcessor`, `HashDailyCountRepository`, `HashDailyCountEventConsumer`, `ApiDbContext` |
 
 **Worker layers:**
 
 | Layer | Responsibility | Key types |
 |---|---|---|
 | **Core** | Domain entity, repository port | `HashEntity`, `IHashRepository` |
-| **Infrastructure** | EF Core persistence, RabbitMQ consumer, message mapper | `HashDbContext`, `HashRepository`, `RabbitMqHashConsumer`, `HashBatchMessageMapper` |
+| **Application** | Use-case handler (CQRS) | `ProcessReceivedHashesCommand`, `ProcessReceivedHashesCommandHandler` |
+| **Infrastructure** | EF Core persistence, RabbitMQ consumer, publisher | `HashDbContext`, `HashRepository`, `RabbitMqHashConsumer`, `RabbitMqPublisher` |
 
 **Processing pipeline:**
 
@@ -58,10 +93,62 @@ Worker (4 parallel consumers)
   → RabbitMQ queue "hash-processing"
   → HashBatchMessage (contract)          // anti-corruption layer
   → HashEntity (domain)                  // mapper
-  → MariaDB hashes table                 // EF Core persistence
+  → MariaDB hashes table                 // EF Core bulk insert
+  → RabbitMQ queue "hash-daily-counts"   // publish aggregated count
+
+API (background consumer)
+  → RabbitMQ queue "hash-daily-counts"
+  → HashDailyCountMessage (contract)     // anti-corruption layer
+  → UpsertHashDailyCountCommandHandler   // upsert to hash_daily_counts table
+
+GET /hashes → GetHashesQueryHandler
+  → IHashDailyCountRepository.GetAllAsync()
+  → 200 OK { hashes: [{ date, count }] }
 ```
 
-RabbitMQ topology (queues, exchanges, bindings) is defined declaratively in [rabbitmq/definitions.json](rabbitmq/definitions.json) and loaded automatically on container startup via [rabbitmq/rabbitmq.conf](rabbitmq/rabbitmq.conf).
+### Sequence diagram
+
+```mermaid
+sequenceDiagram
+  actor Client
+  participant API as HashProcessing.API
+  participant ADB as MariaDB (api)
+  participant RMQ as RabbitMQ
+  participant W as Worker (x4)
+  participant WDB as MariaDB (worker)
+
+  Client->>+API: POST /hashes?count=N
+  API->>API: GenerateHashesCommandHandler
+  API->>+API: IHashGenerator.StreamSha1s()
+  loop Each batch of hashes
+    API-->>API: ChannelReader yields batch
+    API->>RMQ: Publish HashBatchMessage<br/>→ "hash-processing" queue
+  end
+  API-->>-Client: 202 Accepted
+  deactivate API
+
+  par 4 parallel consumers
+    RMQ->>+W: Deliver HashBatchMessage
+    W->>W: Map to HashEntity[]
+    W->>WDB: INSERT IGNORE (bulk)
+    W->>WDB: SELECT COUNT for date
+    W->>RMQ: Publish HashDailyCountMessage<br/>→ "hash-daily-counts" queue
+    W-->>RMQ: ACK
+    deactivate W
+  end
+
+  RMQ->>+API: Deliver HashDailyCountMessage
+  API->>API: UpsertHashDailyCountCommandHandler
+  API->>ADB: UPSERT hash_daily_counts
+  API-->>-RMQ: ACK
+
+  Client->>+API: GET /hashes
+  API->>ADB: GetAllAsync()
+  ADB-->>API: HashDailyCount[]
+  API-->>-Client: 200 OK { hashes: [{ date, count }] }
+```
+
+RabbitMQ topology is defined declaratively in [rabbitmq/definitions.json](rabbitmq/definitions.json) and loaded automatically on container startup via [rabbitmq/rabbitmq.conf](rabbitmq/rabbitmq.conf). Two durable queues are provisioned: `hash-processing` (API → Worker) and `hash-daily-counts` (Worker → API).
 
 ## Getting started
 
@@ -114,14 +201,20 @@ The API will be available at `http://localhost:5031` (and `https://localhost:709
 
 | Method | Route | Description |
 |---|---|---|
-| `POST` | `/hashes` | Generate 40,000 SHA-1 hashes, batch and publish to RabbitMQ. Returns `202 Accepted`. |
-| `GET` | `/hashes` | Retrieve hash counts grouped by date (placeholder — DB integration pending). |
+| `POST` | `/hashes?count={n}` | Generate SHA-1 hashes (default 40,000), batch and publish to RabbitMQ. Returns `202 Accepted`. |
+| `GET` | `/hashes` | Return aggregated daily hash counts ordered by date descending. |
 
-### Example
+### Examples
 
 ```bash
-# Trigger hash generation
+# Generate hashes (default 40,000)
 curl -X POST https://localhost:8081/hashes
+
+# Generate a custom number of hashes
+curl -X POST 'https://localhost:8081/hashes?count=10000'
+
+# Retrieve daily hash counts
+curl https://localhost:8081/hashes
 ```
 
 ## Running tests
@@ -130,7 +223,8 @@ curl -X POST https://localhost:8081/hashes
 dotnet test
 ```
 
-Tests use **xUnit** with **NSubstitute** for mocking. Current coverage includes the `RabbitMqBatchedOffloadToWorkerProcessor` batch-and-publish pipeline.
+- **Unit tests** — xUnit + NSubstitute. Covers the `RabbitMqBatchedOffloadToWorkerProcessor` batch-and-publish pipeline.
+- **Integration tests** — xUnit + Testcontainers. End-to-end flow: POST /hashes → Worker processing → GET /hashes verifies persisted counts. Requires Docker.
 
 ## Benchmarks
 
@@ -144,6 +238,7 @@ Performance benchmarks use [BenchmarkDotNet](https://benchmarkdotnet.org/) with 
 | `HashGenerationPipelineBenchmark` | End-to-end generate → batch → publish through real `RabbitMqBatchedOffloadToWorkerProcessor` against a Testcontainers RabbitMQ instance (1K–100K hashes) | Yes |
 | `ParallelDegreeOfParallelismBenchmark` | Optimal `ParallelHashGenerator` degree of parallelism (1, 2, 4, 8, ProcessorCount) at 40K hashes with real RabbitMQ | Yes |
 | `BatchSizeBenchmark` | Optimal RabbitMQ publish batch size (10–40K) at 1M hashes with real RabbitMQ | Yes |
+| `PrefetchCountBenchmark` | Optimal RabbitMQ consumer prefetch count (1–250) with 4 parallel consumers processing 20K batches | Yes |
 
 ### Running benchmarks
 
@@ -181,15 +276,17 @@ HashProcessing/
 │   ├── HashProcessing.Api/
 │   │   ├── Program.cs                   # Host builder, endpoints, middleware
 │   │   ├── Dockerfile                   # Multi-stage build → Alpine ASP.NET 8.0
-│   │   ├── Application/                 # CQRS command + handler, DI
-│   │   ├── Core/                        # Domain: Sha1Hash, interfaces
-│   │   └── Infrastructure/              # RabbitMQ processor, hash generators
+│   │   ├── Application/                 # CQRS commands/queries + handlers, DI
+│   │   ├── Core/                        # Domain: Sha1Hash, HashDailyCount, interfaces
+│   │   └── Infrastructure/              # RabbitMQ processor, hash generators, EF Core, consumer
+│   ├── HashProcessing.Messaging/        # Shared: RabbitMqPublisher, RabbitMqConsumer<T>, message contracts
 │   └── HashProcessing.Worker/
 │       ├── Program.cs                   # Host builder, auto-migration
 │       ├── Worker.cs                    # BackgroundService — 4 parallel consumers
 │       ├── Dockerfile                   # Multi-stage build → Alpine .NET Runtime 8.0
+│       ├── Application/                 # CQRS command + handler (ProcessReceivedHashes)
 │       ├── Core/                        # Domain: HashEntity, IHashRepository
-│       └── Infrastructure/              # EF Core DbContext, RabbitMQ consumer, mapper
+│       └── Infrastructure/              # EF Core DbContext, RabbitMQ consumer, publisher
 └── tests/
     ├── HashProcessing.Api.UnitTests/    # xUnit + NSubstitute
     ├── HashProcessing.Benchmarks/       # BenchmarkDotNet + Testcontainers
