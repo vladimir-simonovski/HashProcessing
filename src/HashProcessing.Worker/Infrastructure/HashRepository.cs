@@ -9,8 +9,24 @@ public class HashRepository(HashDbContext db) : IHashRepository
 
     public async Task SaveBatchAsync(IReadOnlyCollection<HashEntity> entities, CancellationToken ct = default)
     {
-        _db.Hashes.AddRange(entities);
-        await _db.SaveChangesAsync(ct);
+        if (entities.Count == 0)
+            return;
+
+        var parameters = new List<object>();
+        var valueClauses = new List<string>();
+        var index = 0;
+
+        foreach (var entity in entities)
+        {
+            valueClauses.Add($"({{{index}}}, {{{index + 1}}}, {{{index + 2}}})");
+            parameters.Add(entity.Id);
+            parameters.Add(entity.Date);
+            parameters.Add(entity.Sha1);
+            index += 3;
+        }
+
+        var sql = $"INSERT IGNORE INTO hashes (id, date, sha1) VALUES {string.Join(", ", valueClauses)}";
+        await _db.Database.ExecuteSqlRawAsync(sql, parameters, ct);
     }
 
     public async Task<long> GetCountByDateAsync(DateOnly date, CancellationToken ct = default) 
