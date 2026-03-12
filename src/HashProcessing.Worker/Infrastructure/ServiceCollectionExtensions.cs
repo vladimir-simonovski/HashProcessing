@@ -42,7 +42,8 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<IConnectionFactory>(),
                 sp.GetRequiredService<IServiceScopeFactory>(),
                 sp.GetRequiredService<ILogger<RabbitMqHashConsumer>>(),
-                consumeQueueName));
+                consumeQueueName,
+                prefetchCount: 10));
 
         return services;
     }

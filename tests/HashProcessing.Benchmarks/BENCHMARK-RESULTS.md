@@ -77,3 +77,19 @@ Higher DOP improves `ParallelHashGenerator` throughput (DOP=0 is 3.4× faster th
 | 40,000 | 2.294 s | 1,051.19 MB |
 
 Performance improves sharply from 10→500, with batch size 500 achieving the lowest latency (1.559s). Beyond 500, latency plateaus around 1.9–2.3s. Memory allocation grows steadily with batch size — from 585 MB at 100 to over 1 GB at 40K — due to larger per-publish payloads increasing GC pressure (Gen2 collections rise significantly at 1K+). Batch size 100 offers the best memory efficiency, while 500 is the throughput optimum.
+
+## 5. Consumer Prefetch Count (20K messages, 4 consumers, no-op persistence)
+
+`RabbitMqHashConsumer` consuming 20K pre-loaded messages (10 hashes each, 200K total) with 4 parallel consumers and varying `prefetchCount`. Persistence is replaced with a no-op repository to isolate the RabbitMQ delivery/ack pipeline.
+
+| PrefetchCount | Mean | Allocated |
+|---|---|---|
+| 1 | 10.90 s | 679.83 MB |
+| 5 | 10.20 s | 679.70 MB |
+| 10 | 10.14 s | 679.75 MB |
+| 25 | 10.16 s | 679.76 MB |
+| 50 | 10.08 s | 681.34 MB |
+| 100 | 10.12 s | 679.62 MB |
+| 250 | 10.15 s | 683.35 MB |
+
+PrefetchCount=1 is the slowest (10.90s) due to per-message round-trip overhead — each consumer must wait for a broker ACK before receiving the next message. Increasing prefetch to 5 yields a measurable 6.4% improvement (10.20s) by allowing the broker to push messages ahead of acknowledgements. Beyond 5, performance converges into a narrow ~10.08–10.16s band, indicating the bottleneck shifts from message delivery to consumer-side processing (deserialization, command dispatch, downstream publish). PrefetchCount=50 achieved the lowest mean (10.08s, 7.5% faster than prefetch=1). Memory allocation is stable (~680 MB) across all values except PrefetchCount=250, which triggers significantly more Gen1/Gen2 collections (29K/14K) due to larger in-flight message buffers. A prefetch count of 10–50 provides the best balance of throughput and memory efficiency.
