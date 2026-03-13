@@ -13,12 +13,14 @@ public sealed class BenchmarkWorkerFactory : IAsyncDisposable
 {
     private readonly RabbitMqFixture _rabbitMq;
     private readonly MariaDbFixture _mariaDb;
+    private readonly ushort? _prefetchCount;
     private IHost? _host;
 
-    public BenchmarkWorkerFactory(RabbitMqFixture rabbitMq, MariaDbFixture mariaDb)
+    public BenchmarkWorkerFactory(RabbitMqFixture rabbitMq, MariaDbFixture mariaDb, ushort? prefetchCount = null)
     {
         _rabbitMq = rabbitMq ?? throw new ArgumentNullException(nameof(rabbitMq));
         _mariaDb = mariaDb ?? throw new ArgumentNullException(nameof(mariaDb));
+        _prefetchCount = prefetchCount;
     }
 
     public IServiceProvider Services => _host?.Services ?? throw new InvalidOperationException("Host not started.");
@@ -39,6 +41,20 @@ public sealed class BenchmarkWorkerFactory : IAsyncDisposable
 
         builder.Services.RemoveAll<IConnectionFactory>();
         builder.Services.AddSingleton(_rabbitMq.ConnectionFactory);
+
+        if (_prefetchCount.HasValue)
+        {
+            var prefetch = _prefetchCount.Value;
+            builder.Services.RemoveAll<RabbitMqHashConsumer>();
+            builder.Services.AddSingleton(sp =>
+                new RabbitMqHashConsumer(
+                    sp.GetRequiredService<IConnection>(),
+                    sp.GetRequiredService<IServiceScopeFactory>(),
+                    sp.GetRequiredService<ILogger<RabbitMqHashConsumer>>(),
+                    "hash-processing",
+                    prefetch,
+                    new Dictionary<string, object?> { ["x-dead-letter-exchange"] = "dlx" }));
+        }
 
         _host = builder.Build();
 
