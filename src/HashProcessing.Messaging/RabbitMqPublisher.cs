@@ -54,7 +54,7 @@ public class RabbitMqPublisher(
 
         var body = JsonSerializer.SerializeToUtf8Bytes(message);
 
-        await _retryPipeline.ExecuteAsync(async (CancellationToken token) =>
+        await _retryPipeline.ExecuteAsync(async token =>
         {
             var channel = await GetOrCreateChannelAsync(token);
 
