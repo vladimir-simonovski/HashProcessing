@@ -19,8 +19,3 @@ using (var scope = host.Services.CreateScope())
 }
 
 host.Run();
-
-namespace HashProcessing.Worker
-{
-    public partial class Program { }
-}
