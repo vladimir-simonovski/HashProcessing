@@ -14,6 +14,7 @@ public class RabbitMqBatchedOffloadToWorkerProcessor : IHashProcessor
     private readonly ushort _channelCapacity;
     private readonly ushort _batchSize;
     private readonly string _queueName;
+    private readonly IDictionary<string, object?>? _queueArguments;
 
     public RabbitMqBatchedOffloadToWorkerProcessor(
         IConnectionFactory connectionFactory,
@@ -21,6 +22,7 @@ public class RabbitMqBatchedOffloadToWorkerProcessor : IHashProcessor
         ushort degreeOfParallelism,
         ushort batchSize,
         string queueName,
+        IDictionary<string, object?>? queueArguments = null,
         Func<ushort, ushort>? channelCapacitySelector = null)
     {
         _connectionFactory = connectionFactory ?? throw new ArgumentNullException(nameof(connectionFactory));
@@ -37,6 +39,8 @@ public class RabbitMqBatchedOffloadToWorkerProcessor : IHashProcessor
 
         ArgumentException.ThrowIfNullOrWhiteSpace(queueName);
         _queueName = queueName;
+
+        _queueArguments = queueArguments;
     }
 
     public async Task<ProcessResult> ProcessAsync<THash>(
@@ -129,7 +133,8 @@ public class RabbitMqBatchedOffloadToWorkerProcessor : IHashProcessor
         await using var publisher = new RabbitMqPublisher(
             await _connectionFactory.CreateConnectionAsync(ct),
             _loggerFactory.CreateLogger<RabbitMqPublisher>(),
-            _queueName
+            _queueName,
+            _queueArguments
         );
 
         var publishedCount = 0u;

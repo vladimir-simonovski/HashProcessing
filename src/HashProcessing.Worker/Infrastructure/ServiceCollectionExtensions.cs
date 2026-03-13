@@ -11,6 +11,8 @@ public static class ServiceCollectionExtensions
     {
         const string consumeQueueName = "hash-processing";
         const string publishQueueName = "hash-daily-counts";
+        const string deadLetterExchange = "dlx";
+        var queueArguments = new Dictionary<string, object?> { ["x-dead-letter-exchange"] = deadLetterExchange };
         var rabbitMqHost = configuration["RabbitMQ:HostName"] ?? "localhost";
         var connectionString = configuration.GetConnectionString("MariaDb")
                                ?? "Server=localhost;Database=worker;User=root;Password=root;";
@@ -35,7 +37,8 @@ public static class ServiceCollectionExtensions
             new RabbitMqPublisher(
                 sp.GetRequiredService<IConnection>(),
                 sp.GetRequiredService<ILogger<RabbitMqPublisher>>(),
-                publishQueueName));
+                publishQueueName,
+                queueArguments));
 
         services.AddSingleton(sp =>
             new RabbitMqHashConsumer(
@@ -43,7 +46,8 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<IServiceScopeFactory>(),
                 sp.GetRequiredService<ILogger<RabbitMqHashConsumer>>(),
                 consumeQueueName,
-                prefetchCount: 10));
+                prefetchCount: 10,
+                queueArguments: queueArguments));
 
         return services;
     }

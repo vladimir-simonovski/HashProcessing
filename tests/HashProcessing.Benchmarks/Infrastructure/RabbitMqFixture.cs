@@ -22,11 +22,11 @@ public sealed class RabbitMqFixture : IAsyncDisposable
         };
     }
 
-    public async Task PurgeQueueAsync(string queueName)
+    public async Task PurgeQueueAsync(string queueName, IDictionary<string, object?>? queueArguments = null)
     {
         await using var connection = await ConnectionFactory.CreateConnectionAsync();
         await using var channel = await connection.CreateChannelAsync();
-        await channel.QueueDeclareAsync(queueName, durable: true, exclusive: false, autoDelete: false);
+        await channel.QueueDeclareAsync(queueName, durable: true, exclusive: false, autoDelete: false, arguments: queueArguments);
         await channel.QueuePurgeAsync(queueName);
     }
 

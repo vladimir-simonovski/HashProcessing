@@ -26,16 +26,61 @@
       "vhost": "/",
       "durable": true,
       "auto_delete": false,
-      "arguments": {}
+      "arguments": {
+        "x-dead-letter-exchange": "dlx"
+      }
     },
     {
       "name": "hash-daily-counts",
       "vhost": "/",
       "durable": true,
       "auto_delete": false,
+      "arguments": {
+        "x-dead-letter-exchange": "dlx"
+      }
+    },
+    {
+      "name": "hash-processing-dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
+      "name": "hash-daily-counts-dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
       "arguments": {}
     }
   ],
-  "exchanges": [],
-  "bindings": []
+  "exchanges": [
+    {
+      "name": "dlx",
+      "vhost": "/",
+      "type": "direct",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    }
+  ],
+  "bindings": [
+    {
+      "source": "dlx",
+      "vhost": "/",
+      "destination": "hash-processing-dlq",
+      "destination_type": "queue",
+      "routing_key": "hash-processing",
+      "arguments": {}
+    },
+    {
+      "source": "dlx",
+      "vhost": "/",
+      "destination": "hash-daily-counts-dlq",
+      "destination_type": "queue",
+      "routing_key": "hash-daily-counts",
+      "arguments": {}
+    }
+  ]
 }

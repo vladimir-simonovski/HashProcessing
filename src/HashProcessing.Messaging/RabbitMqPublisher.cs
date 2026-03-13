@@ -11,13 +11,15 @@ namespace HashProcessing.Messaging;
 public class RabbitMqPublisher(
     IConnection connection,
     ILogger<RabbitMqPublisher> logger,
-    string queueName) : IAsyncDisposable
+    string queueName,
+    IDictionary<string, object?>? queueArguments = null) : IAsyncDisposable
 {
     private readonly IConnection _connection = connection ?? throw new ArgumentNullException(nameof(connection));
     private readonly ILogger<RabbitMqPublisher> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     private readonly string _queueName = !string.IsNullOrWhiteSpace(queueName)
         ? queueName
         : throw new ArgumentException("Queue name must not be null or whitespace.", nameof(queueName));
+    private readonly IDictionary<string, object?>? _queueArguments = queueArguments;
     private IChannel? _channel;
 
     private readonly ResiliencePipeline _retryPipeline = new ResiliencePipelineBuilder()
@@ -92,6 +94,7 @@ public class RabbitMqPublisher(
             durable: true,
             exclusive: false,
             autoDelete: false,
+            arguments: _queueArguments,
             cancellationToken: ct);
 
         return _channel;

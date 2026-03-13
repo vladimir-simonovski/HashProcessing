@@ -9,8 +9,9 @@ public class RabbitMqHashConsumer(
     IServiceScopeFactory scopeFactory,
     ILogger<RabbitMqHashConsumer> logger,
     string queueName,
-    ushort prefetchCount = 10)
-    : RabbitMqConsumer<HashBatchMessage>(connectionFactory, logger, queueName, prefetchCount)
+    ushort prefetchCount = 10,
+    IDictionary<string, object?>? queueArguments = null)
+    : RabbitMqConsumer<HashBatchMessage>(connectionFactory, logger, queueName, prefetchCount, queueArguments)
 {
     protected override async Task HandleMessageAsync(
         HashBatchMessage message,

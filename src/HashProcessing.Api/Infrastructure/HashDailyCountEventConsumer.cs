@@ -8,8 +8,9 @@ public class HashDailyCountEventConsumer(
     IConnectionFactory connectionFactory,
     IServiceScopeFactory scopeFactory,
     ILogger<HashDailyCountEventConsumer> logger,
-    string queueName)
-    : RabbitMqConsumer<HashDailyCountMessage>(connectionFactory, logger, queueName)
+    string queueName,
+    IDictionary<string, object?>? queueArguments = null)
+    : RabbitMqConsumer<HashDailyCountMessage>(connectionFactory, logger, queueName, queueArguments: queueArguments)
 {
     protected override async Task HandleMessageAsync(
         HashDailyCountMessage message,

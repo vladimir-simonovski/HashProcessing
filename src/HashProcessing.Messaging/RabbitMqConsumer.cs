@@ -12,12 +12,14 @@ public abstract class RabbitMqConsumer<TMessage> where TMessage : MessageBase
     private readonly ILogger _logger;
     private readonly string _queueName;
     private readonly ushort _prefetchCount;
+    private readonly IDictionary<string, object?>? _queueArguments;
 
     protected RabbitMqConsumer(
         IConnectionFactory connectionFactory,
         ILogger logger,
         string queueName,
-        ushort prefetchCount = 1)
+        ushort prefetchCount = 1,
+        IDictionary<string, object?>? queueArguments = null)
     {
         _connectionFactory = connectionFactory ?? throw new ArgumentNullException(nameof(connectionFactory));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -27,6 +29,8 @@ public abstract class RabbitMqConsumer<TMessage> where TMessage : MessageBase
 
         ArgumentOutOfRangeException.ThrowIfZero(prefetchCount);
         _prefetchCount = prefetchCount;
+
+        _queueArguments = queueArguments;
     }
 
     protected abstract Task HandleMessageAsync(TMessage message, CancellationToken ct);
@@ -41,6 +45,7 @@ public abstract class RabbitMqConsumer<TMessage> where TMessage : MessageBase
             durable: true,
             exclusive: false,
             autoDelete: false,
+            arguments: _queueArguments,
             cancellationToken: ct);
 
         await channel.BasicQosAsync(prefetchSize: 0, prefetchCount: _prefetchCount, global: false, cancellationToken: ct);
@@ -77,9 +82,9 @@ public abstract class RabbitMqConsumer<TMessage> where TMessage : MessageBase
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Consumer {ConsumerId}: failed to process {MessageType}",
+                _logger.LogError(ex, "Consumer {ConsumerId}: failed to process {MessageType}, dead-lettering",
                     consumerId, typeof(TMessage).Name);
-                await ch.BasicNackAsync(ea.DeliveryTag, multiple: false, requeue: true, cancellationToken: ct);
+                await ch.BasicNackAsync(ea.DeliveryTag, multiple: false, requeue: false, cancellationToken: ct);
             }
         };
 

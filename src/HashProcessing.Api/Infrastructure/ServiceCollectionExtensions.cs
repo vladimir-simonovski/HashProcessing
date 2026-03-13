@@ -14,6 +14,8 @@ public static class ServiceCollectionExtensions
         const ushort batchSize = 100;
         const string publishQueueName = "hash-processing";
         const string consumeQueueName = "hash-daily-counts";
+        const string deadLetterExchange = "dlx";
+        var queueArguments = new Dictionary<string, object?> { ["x-dead-letter-exchange"] = deadLetterExchange };
         var rabbitMqHost = configuration["RabbitMQ:HostName"] ?? "localhost";
         var connectionString = configuration.GetConnectionString("MariaDb")
                                ?? "Server=localhost;Database=api;User=root;Password=root;";
@@ -40,14 +42,16 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<ILoggerFactory>(),
                 degreeOfParallelism,
                 batchSize,
-                publishQueueName));
+                publishQueueName,
+                queueArguments));
 
         services.AddSingleton(sp =>
             new HashDailyCountEventConsumer(
                 sp.GetRequiredService<IConnectionFactory>(),
                 sp.GetRequiredService<IServiceScopeFactory>(),
                 sp.GetRequiredService<ILogger<HashDailyCountEventConsumer>>(),
-                consumeQueueName));
+                consumeQueueName,
+                queueArguments));
 
         services.AddHostedService<HashDailyCountEventBackgroundService>();
 
