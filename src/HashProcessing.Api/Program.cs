@@ -1,5 +1,6 @@
 using HashProcessing.Api.Application;
 using HashProcessing.Api.Infrastructure;
+using JetBrains.Annotations;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -78,5 +79,7 @@ app.Run();
 
 namespace HashProcessing.Api
 {
+    // ReSharper disable once PartialTypeWithSinglePart
+    [UsedImplicitly]
     public partial class Program { }   
 }
