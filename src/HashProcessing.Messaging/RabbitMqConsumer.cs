@@ -50,8 +50,9 @@ public abstract class RabbitMqConsumer<TMessage> where TMessage : MessageBase
 
         var consumer = new AsyncEventingBasicConsumer(channel);
 
-        consumer.ReceivedAsync += async (_, ea) =>
+        consumer.ReceivedAsync += async (sender, ea) =>
         {
+            var ch = ((AsyncEventingBasicConsumer)sender).Channel;
             try
             {
                 var message = JsonSerializer.Deserialize<TMessage>(ea.Body.Span);
@@ -60,13 +61,13 @@ public abstract class RabbitMqConsumer<TMessage> where TMessage : MessageBase
                 {
                     _logger.LogWarning("Consumer {ConsumerId}: received null {MessageType}, nacking",
                         consumerId, typeof(TMessage).Name);
-                    await channel.BasicNackAsync(ea.DeliveryTag, multiple: false, requeue: false, cancellationToken: ct);
+                    await ch.BasicNackAsync(ea.DeliveryTag, multiple: false, requeue: false, cancellationToken: ct);
                     return;
                 }
                 
                 await HandleMessageAsync(message, ct);
 
-                await channel.BasicAckAsync(ea.DeliveryTag, multiple: false, cancellationToken: ct);
+                await ch.BasicAckAsync(ea.DeliveryTag, multiple: false, cancellationToken: ct);
                 _logger.LogDebug("Consumer {ConsumerId}: processed {MessageType}",
                     consumerId, typeof(TMessage).Name);
             }
@@ -78,7 +79,7 @@ public abstract class RabbitMqConsumer<TMessage> where TMessage : MessageBase
             {
                 _logger.LogError(ex, "Consumer {ConsumerId}: failed to process {MessageType}",
                     consumerId, typeof(TMessage).Name);
-                await channel.BasicNackAsync(ea.DeliveryTag, multiple: false, requeue: true, cancellationToken: ct);
+                await ch.BasicNackAsync(ea.DeliveryTag, multiple: false, requeue: true, cancellationToken: ct);
             }
         };
 
@@ -91,6 +92,13 @@ public abstract class RabbitMqConsumer<TMessage> where TMessage : MessageBase
         _logger.LogInformation("Consumer {ConsumerId}: listening on queue '{QueueName}'",
             consumerId, _queueName);
 
-        await tcs.Task;
+        try
+        {
+            await tcs.Task;
+        }
+        catch (OperationCanceledException)
+        {
+            // Shutting down
+        }
     }
 }
