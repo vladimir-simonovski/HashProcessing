@@ -1,8 +1,10 @@
+using JetBrains.Annotations;
 using Testcontainers.MariaDb;
 using Testcontainers.RabbitMq;
 
-namespace HashProcessing.IntegrationTests;
+namespace HashProcessing.IntegrationTests.Fixtures;
 
+[UsedImplicitly]
 public class IntegrationTestFixture : IAsyncLifetime
 {
     private readonly MariaDbContainer _mariaDb = new MariaDbBuilder()

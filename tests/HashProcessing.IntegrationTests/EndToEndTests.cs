@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Net.Http.Json;
 using HashProcessing.Api.Application;
+using HashProcessing.IntegrationTests.Fixtures;
 
 namespace HashProcessing.IntegrationTests;
 

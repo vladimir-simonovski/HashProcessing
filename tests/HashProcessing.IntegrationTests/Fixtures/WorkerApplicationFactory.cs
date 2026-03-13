@@ -6,7 +6,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using RabbitMQ.Client;
 
-namespace HashProcessing.IntegrationTests;
+namespace HashProcessing.IntegrationTests.Fixtures;
 
 public class WorkerApplicationFactory(string dbConnectionString, string rabbitMqConnectionString) : IAsyncLifetime
 {

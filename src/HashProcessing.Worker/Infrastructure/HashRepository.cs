@@ -12,18 +12,8 @@ public class HashRepository(HashDbContext db) : IHashRepository
         if (entities.Count == 0)
             return;
 
-        var parameters = new List<object>();
-        var valueClauses = new List<string>();
-        var index = 0;
-
-        foreach (var entity in entities)
-        {
-            valueClauses.Add($"({{{index}}}, {{{index + 1}}}, {{{index + 2}}})");
-            parameters.Add(entity.Id);
-            parameters.Add(entity.Date);
-            parameters.Add(entity.Sha1);
-            index += 3;
-        }
+        var parameters = entities.SelectMany(e => new object[] { e.Id, e.Date, e.Sha1 }).ToList();
+        var valueClauses = entities.Select((_, i) => $"({{{i * 3}}}, {{{i * 3 + 1}}}, {{{i * 3 + 2}}})");
 
         var sql = $"INSERT IGNORE INTO hashes (id, date, sha1) VALUES {string.Join(", ", valueClauses)}";
         await _db.Database.ExecuteSqlRawAsync(sql, parameters, ct);

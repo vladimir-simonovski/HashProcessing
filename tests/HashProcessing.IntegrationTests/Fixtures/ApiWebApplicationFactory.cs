@@ -7,7 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using RabbitMQ.Client;
 
-namespace HashProcessing.IntegrationTests;
+namespace HashProcessing.IntegrationTests.Fixtures;
 
 public class ApiWebApplicationFactory(string dbConnectionString, string rabbitMqConnectionString)
     : WebApplicationFactory<Program>
