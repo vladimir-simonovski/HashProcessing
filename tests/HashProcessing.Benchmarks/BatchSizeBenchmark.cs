@@ -15,7 +15,7 @@ public class BatchSizeBenchmark
 
     private RabbitMqFixture _fixture = null!;
 
-    [Params(10, 50, 100, 250, 500, 1_000, 2_000, 5_000, 10_000, 20_000, 40_000)]
+    [Params(10, 50, 100, 250, 500, 1_000, 40_000)]
     public ushort BatchSize { get; set; }
 
     [GlobalSetup]

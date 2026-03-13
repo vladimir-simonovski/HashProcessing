@@ -28,7 +28,7 @@ public class PrefetchCountBenchmark
     private RabbitMqHashConsumer _consumer = null!;
     private IConnection _preloadConnection = null!;
 
-    [Params(1, 5, 10, 25, 50, 100, 250)]
+    [Params(1, 10, 25, 50, 250)]
     public ushort PrefetchCount { get; set; }
 
     [GlobalSetup]

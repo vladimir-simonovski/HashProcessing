@@ -9,7 +9,7 @@ namespace HashProcessing.Benchmarks;
 [MemoryDiagnoser]
 public class HashGenerationPipelineBenchmark
 {
-    private const ushort BatchSize = 100;
+    private const ushort BatchSize = 500;
     private const ushort ChannelCapacity = 128;
     private const ushort DegreeOfParallelism = 0; // ProcessorCount
     private const string QueueName = "benchmark-hash-processing";
