@@ -1,3 +1,4 @@
+using HashProcessing.Messaging;
 using HashProcessing.Worker.Application;
 using HashProcessing.Worker.Infrastructure;
 using Microsoft.EntityFrameworkCore;
@@ -9,19 +10,15 @@ using RabbitMQ.Client;
 
 namespace HashProcessing.Benchmarks.Infrastructure;
 
-public sealed class BenchmarkWorkerFactory : IAsyncDisposable
+public sealed class BenchmarkWorkerFactory(
+    RabbitMqFixture rabbitMq,
+    MariaDbFixture mariaDb,
+    ushort? prefetchCount = null)
+    : IAsyncDisposable
 {
-    private readonly RabbitMqFixture _rabbitMq;
-    private readonly MariaDbFixture _mariaDb;
-    private readonly ushort? _prefetchCount;
+    private readonly RabbitMqFixture _rabbitMq = rabbitMq ?? throw new ArgumentNullException(nameof(rabbitMq));
+    private readonly MariaDbFixture _mariaDb = mariaDb ?? throw new ArgumentNullException(nameof(mariaDb));
     private IHost? _host;
-
-    public BenchmarkWorkerFactory(RabbitMqFixture rabbitMq, MariaDbFixture mariaDb, ushort? prefetchCount = null)
-    {
-        _rabbitMq = rabbitMq ?? throw new ArgumentNullException(nameof(rabbitMq));
-        _mariaDb = mariaDb ?? throw new ArgumentNullException(nameof(mariaDb));
-        _prefetchCount = prefetchCount;
-    }
 
     public IServiceProvider Services => _host?.Services ?? throw new InvalidOperationException("Host not started.");
 
@@ -42,18 +39,18 @@ public sealed class BenchmarkWorkerFactory : IAsyncDisposable
         builder.Services.RemoveAll<IConnectionFactory>();
         builder.Services.AddSingleton(_rabbitMq.ConnectionFactory);
 
-        if (_prefetchCount.HasValue)
+        if (prefetchCount.HasValue)
         {
-            var prefetch = _prefetchCount.Value;
+            var prefetch = prefetchCount.Value;
             builder.Services.RemoveAll<RabbitMqHashConsumer>();
             builder.Services.AddSingleton(sp =>
                 new RabbitMqHashConsumer(
-                    sp.GetRequiredService<IConnection>(),
+                    sp.GetRequiredService<ConsumerChannelPool>(),
                     sp.GetRequiredService<IServiceScopeFactory>(),
                     sp.GetRequiredService<ILogger<RabbitMqHashConsumer>>(),
                     "hash-processing",
                     prefetch,
-                    new Dictionary<string, object?> { ["x-dead-letter-exchange"] = "dlx" }));
+                    new QueueArguments { DeadLetterExchange = "dlx" }));
         }
 
         _host = builder.Build();

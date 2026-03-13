@@ -2,6 +2,8 @@ using BenchmarkDotNet.Attributes;
 using HashProcessing.Api.Core;
 using HashProcessing.Api.Infrastructure;
 using HashProcessing.Benchmarks.Infrastructure;
+using HashProcessing.Messaging;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
@@ -33,9 +35,16 @@ public class HashGenerationPipelineBenchmark
             PublishQueueName = QueueName
         });
 
-        _processor = new RabbitMqBatchedOffloadToWorkerProcessor(
+        var publisherPool = new PublisherChannelPool(
             _fixture.Connection,
-            NullLoggerFactory.Instance,
+            NullLoggerFactory.Instance.CreateLogger<PublisherChannelPool>());
+
+        var publisher = new RabbitMqPublisher(
+            publisherPool,
+            NullLoggerFactory.Instance.CreateLogger<RabbitMqPublisher>());
+
+        _processor = new RabbitMqBatchedOffloadToWorkerProcessor(
+            publisher,
             options);
     }
 

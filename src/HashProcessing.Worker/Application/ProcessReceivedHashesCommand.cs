@@ -1,5 +1,7 @@
 using HashProcessing.Messaging;
 using HashProcessing.Worker.Core;
+using HashProcessing.Worker.Infrastructure;
+using Microsoft.Extensions.Options;
 
 namespace HashProcessing.Worker.Application;
 
@@ -21,11 +23,17 @@ public class ProcessReceivedHashesCommand
 public class ProcessReceivedHashesCommandHandler(
     IHashRepository repository,
     RabbitMqPublisher publisher,
+    IOptions<WorkerOptions> workerOptions,
     ILogger<ProcessReceivedHashesCommandHandler> logger)
 {
     private readonly IHashRepository _repository = repository ?? throw new ArgumentNullException(nameof(repository));
     private readonly RabbitMqPublisher _publisher = publisher ?? throw new ArgumentNullException(nameof(publisher));
     private readonly ILogger<ProcessReceivedHashesCommandHandler> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    private readonly string _queueName = (workerOptions ?? throw new ArgumentNullException(nameof(workerOptions))).Value.PublishQueueName;
+    private readonly QueueArguments _queueArguments = new()
+    {
+        DeadLetterExchange = (workerOptions ?? throw new ArgumentNullException(nameof(workerOptions))).Value.DeadLetterExchange
+    };
 
     public async Task HandleAsync(ProcessReceivedHashesCommand command, CancellationToken ct = default)
     {
@@ -35,7 +43,7 @@ public class ProcessReceivedHashesCommandHandler(
         var countsByDate = await _repository.GetCountsByDatesAsync(dates, ct);
 
         await Task.WhenAll(countsByDate.Select(x =>
-            _publisher.PublishAsync(new HashDailyCountMessage(x.Key, x.Value), ct)));
+            _publisher.PublishAsync(new HashDailyCountMessage(x.Key, x.Value), _queueName, _queueArguments, ct)));
 
         _logger.LogDebug("Persisted batch of {Count} hashes, published daily counts for {DateCount} date(s)",
             command.Entities.Count, countsByDate.Count);

@@ -2,6 +2,7 @@ using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Engines;
 using HashProcessing.Api.Infrastructure;
 using HashProcessing.Benchmarks.Infrastructure;
+using HashProcessing.Messaging;
 using HashProcessing.Worker.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -17,9 +18,9 @@ public class PrefetchCountBenchmark
     private const string HashProcessingQueue = "hash-processing";
     private const string DailyCountsQueue = "hash-daily-counts";
 
-    private static readonly Dictionary<string, object?> QueueArguments = new()
+    private static readonly QueueArguments QueueArguments = new()
     {
-        ["x-dead-letter-exchange"] = "dlx"
+        DeadLetterExchange = "dlx"
     };
 
     private RabbitMqFixture _rabbitMq = null!;

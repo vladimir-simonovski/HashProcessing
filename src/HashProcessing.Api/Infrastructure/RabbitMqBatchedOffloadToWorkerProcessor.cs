@@ -2,26 +2,17 @@ using System.Threading.Channels;
 using HashProcessing.Api.Core;
 using HashProcessing.Messaging;
 using Microsoft.Extensions.Options;
-using RabbitMQ.Client;
 using static HashProcessing.Api.Infrastructure.Util;
 
 namespace HashProcessing.Api.Infrastructure;
 
-public class RabbitMqBatchedOffloadToWorkerProcessor : IHashProcessor
+public class RabbitMqBatchedOffloadToWorkerProcessor(
+    RabbitMqPublisher publisher,
+    IOptionsMonitor<HashProcessingOptions> options)
+    : IHashProcessor
 {
-    private readonly IConnection _connection;
-    private readonly ILoggerFactory _loggerFactory;
-    private readonly IOptionsMonitor<HashProcessingOptions> _options;
-
-    public RabbitMqBatchedOffloadToWorkerProcessor(
-        IConnection connection,
-        ILoggerFactory loggerFactory,
-        IOptionsMonitor<HashProcessingOptions> options)
-    {
-        _connection = connection ?? throw new ArgumentNullException(nameof(connection));
-        _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
-        _options = options ?? throw new ArgumentNullException(nameof(options));
-    }
+    private readonly RabbitMqPublisher _publisher = publisher ?? throw new ArgumentNullException(nameof(publisher));
+    private readonly IOptionsMonitor<HashProcessingOptions> _options = options ?? throw new ArgumentNullException(nameof(options));
 
     public async Task<ProcessResult> ProcessAsync<THash>(
         ChannelReader<THash> hashChannelReader,
@@ -30,11 +21,9 @@ public class RabbitMqBatchedOffloadToWorkerProcessor : IHashProcessor
     {
         var opts = _options.CurrentValue;
         ArgumentOutOfRangeException.ThrowIfZero(opts.BatchSize);
-        ArgumentException.ThrowIfNullOrWhiteSpace(opts.PublishQueueName);
 
         var degreeOfParallelism = EnsureDegreeOfParallelism(opts.DegreeOfParallelism);
         var channelCapacity = EnsureChannelCapacity((ushort)(degreeOfParallelism * 2));
-        var queueArguments = new Dictionary<string, object?> { ["x-dead-letter-exchange"] = opts.DeadLetterExchange };
 
         var batchChannel = Channel.CreateBounded<IGeneratedHash[]>(
             new BoundedChannelOptions(channelCapacity)
@@ -48,13 +37,12 @@ public class RabbitMqBatchedOffloadToWorkerProcessor : IHashProcessor
             = StartBatchChannelStreaming(
                 hashChannelReader,
                 batchChannel.Writer,
-                opts.BatchSize,
                 ct);
 
         var publishingTasks = new List<Task<uint>>(degreeOfParallelism);
 
         for (var i = 0; i < degreeOfParallelism; i++)
-            publishingTasks.Add(PublishAsync(batchChannel.Reader, opts.PublishQueueName, queueArguments, ct));
+            publishingTasks.Add(PublishAsync(batchChannel.Reader, ct));
 
         var publishResults = await Task.WhenAll(publishingTasks);
 
@@ -66,11 +54,11 @@ public class RabbitMqBatchedOffloadToWorkerProcessor : IHashProcessor
     private TaskCompletionSource<uint> StartBatchChannelStreaming<THash>(
         ChannelReader<THash> hashChannelReader,
         ChannelWriter<IGeneratedHash[]> batchChannelWriter,
-        ushort batchSize,
         CancellationToken ct) where THash : IGeneratedHash
     {
+        var batchSize = _options.CurrentValue.BatchSize;
         var tcsStreaming = new TaskCompletionSource<uint>();
-
+        
         _ = Task.Run(async () =>
         {
             var streamedCount = 0u;
@@ -117,16 +105,11 @@ public class RabbitMqBatchedOffloadToWorkerProcessor : IHashProcessor
 
     private async Task<uint> PublishAsync(
         ChannelReader<IGeneratedHash[]> batchChannelReader,
-        string queueName,
-        IDictionary<string, object?>? queueArguments,
         CancellationToken ct)
     {
-        await using var publisher = new RabbitMqPublisher(
-            _connection,
-            _loggerFactory.CreateLogger<RabbitMqPublisher>(),
-            queueName,
-            queueArguments
-        );
+        var opts = _options.CurrentValue;
+        var queueName = opts.PublishQueueName;
+        var queueArguments = new QueueArguments { DeadLetterExchange = opts.DeadLetterExchange };
 
         var publishedCount = 0u;
 
@@ -134,7 +117,7 @@ public class RabbitMqBatchedOffloadToWorkerProcessor : IHashProcessor
         {
             var hashBatchMessage = batch.ToHashBatchMessage();
 
-            await publisher.PublishAsync(hashBatchMessage, ct);
+            await _publisher.PublishAsync(hashBatchMessage, queueName, queueArguments, ct);
 
             Interlocked.Add(ref publishedCount, (uint)batch.Length);
         }

@@ -1,7 +1,9 @@
 using System.Threading.Channels;
 using HashProcessing.Api.Core;
 using HashProcessing.Api.Infrastructure;
+using HashProcessing.Messaging;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using RabbitMQ.Client;
@@ -25,8 +27,14 @@ public class RabbitMqBatchedOffloadToWorkerProcessorShould
         var connection = Substitute.For<IConnection>();
         connection.CreateChannelAsync(Arg.Any<CreateChannelOptions?>(), Arg.Any<CancellationToken>())
             .Returns(rabbitMqChannel);
-        
-        var loggerFactory = Substitute.For<ILoggerFactory>();
+
+        var publisherPool = new PublisherChannelPool(
+            connection,
+            NullLoggerFactory.Instance.CreateLogger<PublisherChannelPool>());
+
+        var publisher = new RabbitMqPublisher(
+            publisherPool,
+            NullLoggerFactory.Instance.CreateLogger<RabbitMqPublisher>());
 
         var options = Substitute.For<IOptionsMonitor<HashProcessingOptions>>();
         options.CurrentValue.Returns(new HashProcessingOptions
@@ -38,8 +46,7 @@ public class RabbitMqBatchedOffloadToWorkerProcessorShould
         });
 
         var processor = new RabbitMqBatchedOffloadToWorkerProcessor(
-            connection,
-            loggerFactory,
+            publisher,
             options
         );
         

@@ -1,3 +1,4 @@
+using HashProcessing.Messaging;
 using RabbitMQ.Client;
 using Testcontainers.RabbitMq;
 
@@ -25,10 +26,10 @@ public sealed class RabbitMqFixture : IAsyncDisposable
         Connection = await ConnectionFactory.CreateConnectionAsync();
     }
 
-    public async Task PurgeQueueAsync(string queueName, IDictionary<string, object?>? queueArguments = null)
+    public async Task PurgeQueueAsync(string queueName, QueueArguments? queueArguments = null)
     {
         await using var channel = await Connection.CreateChannelAsync();
-        await channel.QueueDeclareAsync(queueName, durable: true, exclusive: false, autoDelete: false, arguments: queueArguments);
+        await channel.QueueDeclareAsync(queueName, durable: true, exclusive: false, autoDelete: false, arguments: queueArguments?.ToDictionary());
         await channel.QueuePurgeAsync(queueName);
     }
 

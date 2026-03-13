@@ -7,21 +7,21 @@ namespace HashProcessing.Messaging;
 
 public abstract class RabbitMqConsumer<TMessage> where TMessage : MessageBase
 {
-    private readonly IConnection _connection;
+    private readonly ConsumerChannelPool _channelPool;
 
     private readonly ILogger _logger;
     private readonly string _queueName;
     private readonly ushort _prefetchCount;
-    private readonly IDictionary<string, object?>? _queueArguments;
+    private readonly QueueArguments? _queueArguments;
 
     protected RabbitMqConsumer(
-        IConnection connection,
+        ConsumerChannelPool channelPool,
         ILogger logger,
         string queueName,
         ushort prefetchCount = 1,
-        IDictionary<string, object?>? queueArguments = null)
+        QueueArguments? queueArguments = null)
     {
-        _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+        _channelPool = channelPool ?? throw new ArgumentNullException(nameof(channelPool));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
         ArgumentException.ThrowIfNullOrWhiteSpace(queueName);
@@ -37,14 +37,15 @@ public abstract class RabbitMqConsumer<TMessage> where TMessage : MessageBase
 
     public async Task ConsumeAsync(int consumerId, CancellationToken ct)
     {
-        await using var channel = await _connection.CreateChannelAsync(cancellationToken: ct);
+        await using var lease = await _channelPool.AcquireAsync(ct);
+        var channel = lease.Channel;
 
         await channel.QueueDeclareAsync(
             _queueName,
             durable: true,
             exclusive: false,
             autoDelete: false,
-            arguments: _queueArguments,
+            arguments: _queueArguments?.ToDictionary(),
             cancellationToken: ct);
 
         await channel.BasicQosAsync(prefetchSize: 0, prefetchCount: _prefetchCount, global: false, cancellationToken: ct);
@@ -87,7 +88,7 @@ public abstract class RabbitMqConsumer<TMessage> where TMessage : MessageBase
             }
         };
 
-        await channel.BasicConsumeAsync(
+        var consumerTag = await channel.BasicConsumeAsync(
             queue: _queueName,
             autoAck: false,
             consumer: consumer,
@@ -103,6 +104,11 @@ public abstract class RabbitMqConsumer<TMessage> where TMessage : MessageBase
         catch (OperationCanceledException)
         {
             // Shutting down
+        }
+        finally
+        {
+            try { await channel.BasicCancelAsync(consumerTag, noWait: false, ct); }
+            catch { /* channel may already be closed */ }
         }
     }
 }

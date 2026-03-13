@@ -2,6 +2,8 @@ using BenchmarkDotNet.Attributes;
 using HashProcessing.Api.Core;
 using HashProcessing.Api.Infrastructure;
 using HashProcessing.Benchmarks.Infrastructure;
+using HashProcessing.Messaging;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace HashProcessing.Benchmarks.Producer;
@@ -50,9 +52,16 @@ public class ParallelDegreeOfParallelismBenchmark
             PublishQueueName = QueueName
         });
 
-        var processor = new RabbitMqBatchedOffloadToWorkerProcessor(
+        var publisherPool = new PublisherChannelPool(
             _fixture.Connection,
-            NullLoggerFactory.Instance,
+            NullLoggerFactory.Instance.CreateLogger<PublisherChannelPool>());
+
+        var publisher = new RabbitMqPublisher(
+            publisherPool,
+            NullLoggerFactory.Instance.CreateLogger<RabbitMqPublisher>());
+
+        var processor = new RabbitMqBatchedOffloadToWorkerProcessor(
+            publisher,
             options);
 
         return await processor.ProcessAsync(reader);

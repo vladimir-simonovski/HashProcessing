@@ -1,4 +1,5 @@
 using HashProcessing.Api.Core;
+using HashProcessing.Messaging;
 using Microsoft.EntityFrameworkCore;
 using RabbitMQ.Client;
 
@@ -24,6 +25,11 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton(sp =>
             sp.GetRequiredService<IConnectionFactory>().CreateConnectionAsync().GetAwaiter().GetResult());
+
+        services.AddSingleton<ConsumerChannelPool>();
+        services.AddSingleton<PublisherChannelPool>();
+
+        services.AddSingleton<RabbitMqPublisher>();
 
         services.AddDbContext<ApiDbContext>(options =>
             options.UseMySql(connectionString, new MariaDbServerVersion(new Version(11, 0))));

@@ -9,10 +9,11 @@ public static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
+        services.Configure<WorkerOptions>(configuration.GetSection("Worker"));
+
         const string consumeQueueName = "hash-processing";
-        const string publishQueueName = "hash-daily-counts";
         const string deadLetterExchange = "dlx";
-        var queueArguments = new Dictionary<string, object?> { ["x-dead-letter-exchange"] = deadLetterExchange };
+        var queueArguments = new QueueArguments{DeadLetterExchange =  deadLetterExchange};
         var rabbitMqHost = configuration["RabbitMQ:HostName"] ?? "localhost";
         var connectionString = configuration.GetConnectionString("MariaDb")
                                ?? "Server=localhost;Database=worker;User=root;Password=root;";
@@ -33,16 +34,14 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(sp =>
             sp.GetRequiredService<IConnectionFactory>().CreateConnectionAsync().GetAwaiter().GetResult());
 
-        services.AddScoped(sp =>
-            new RabbitMqPublisher(
-                sp.GetRequiredService<IConnection>(),
-                sp.GetRequiredService<ILogger<RabbitMqPublisher>>(),
-                publishQueueName,
-                queueArguments));
+        services.AddSingleton<ConsumerChannelPool>();
+        services.AddSingleton<PublisherChannelPool>();
+
+        services.AddSingleton<RabbitMqPublisher>();
 
         services.AddSingleton(sp =>
             new RabbitMqHashConsumer(
-                sp.GetRequiredService<IConnection>(),
+                sp.GetRequiredService<ConsumerChannelPool>(),
                 sp.GetRequiredService<IServiceScopeFactory>(),
                 sp.GetRequiredService<ILogger<RabbitMqHashConsumer>>(),
                 consumeQueueName,
