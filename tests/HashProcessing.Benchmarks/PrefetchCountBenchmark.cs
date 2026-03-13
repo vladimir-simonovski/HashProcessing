@@ -26,7 +26,6 @@ public class PrefetchCountBenchmark
     private RabbitMqFixture _fixture = null!;
     private CountingHashRepository _countingRepository = null!;
     private RabbitMqHashConsumer _consumer = null!;
-    private IConnection _preloadConnection = null!;
 
     [Params(1, 10, 25, 50, 250)]
     public ushort PrefetchCount { get; set; }
@@ -36,7 +35,6 @@ public class PrefetchCountBenchmark
     {
         _fixture = new RabbitMqFixture();
         await _fixture.StartAsync();
-        _preloadConnection = await _fixture.ConnectionFactory.CreateConnectionAsync();
     }
 
     [IterationSetup]
@@ -52,7 +50,7 @@ public class PrefetchCountBenchmark
 
         var services = new ServiceCollection();
         services.AddSingleton(_fixture.ConnectionFactory);
-        services.AddSingleton(_preloadConnection);
+        services.AddSingleton(_fixture.Connection);
         services.AddSingleton<ILoggerFactory>(NullLoggerFactory.Instance);
         services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
         services.AddSingleton<IHashRepository>(_countingRepository);
@@ -66,7 +64,7 @@ public class PrefetchCountBenchmark
         var sp = services.BuildServiceProvider();
 
         _consumer = new RabbitMqHashConsumer(
-            _fixture.ConnectionFactory,
+            _fixture.Connection,
             sp.GetRequiredService<IServiceScopeFactory>(),
             NullLogger<RabbitMqHashConsumer>.Instance,
             ConsumeQueueName,
@@ -76,7 +74,6 @@ public class PrefetchCountBenchmark
     [GlobalCleanup]
     public async Task GlobalCleanup()
     {
-        _preloadConnection.Dispose();
         await _fixture.DisposeAsync();
     }
 
@@ -103,7 +100,7 @@ public class PrefetchCountBenchmark
     private async Task PreloadMessagesAsync()
     {
         await using var publisher = new RabbitMqPublisher(
-            _preloadConnection,
+            _fixture.Connection,
             NullLogger<RabbitMqPublisher>.Instance,
             ConsumeQueueName);
 

@@ -42,7 +42,7 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton(sp =>
             new RabbitMqHashConsumer(
-                sp.GetRequiredService<IConnectionFactory>(),
+                sp.GetRequiredService<IConnection>(),
                 sp.GetRequiredService<IServiceScopeFactory>(),
                 sp.GetRequiredService<ILogger<RabbitMqHashConsumer>>(),
                 consumeQueueName,

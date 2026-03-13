@@ -24,15 +24,11 @@ public class RabbitMqBatchedOffloadToWorkerProcessorShould
         var connection = Substitute.For<IConnection>();
         connection.CreateChannelAsync(Arg.Any<CreateChannelOptions?>(), Arg.Any<CancellationToken>())
             .Returns(rabbitMqChannel);
-
-        var connectionFactory = Substitute.For<IConnectionFactory>();
-        connectionFactory.CreateConnectionAsync(Arg.Any<CancellationToken>())
-            .Returns(connection);
         
         var loggerFactory = Substitute.For<ILoggerFactory>();
 
         var processor = new RabbitMqBatchedOffloadToWorkerProcessor(
-            connectionFactory,
+            connection,
             loggerFactory,
             degreeOfParallelism: 2,
             batchSize: 100,

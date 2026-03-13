@@ -27,7 +27,7 @@ public class HashGenerationPipelineBenchmark
         await _fixture.StartAsync();
 
         _processor = new RabbitMqBatchedOffloadToWorkerProcessor(
-            _fixture.ConnectionFactory,
+            _fixture.Connection,
             NullLoggerFactory.Instance,
             DegreeOfParallelism,
             BatchSize,

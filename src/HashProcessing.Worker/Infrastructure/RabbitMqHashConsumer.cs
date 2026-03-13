@@ -5,13 +5,13 @@ using RabbitMQ.Client;
 namespace HashProcessing.Worker.Infrastructure;
 
 public class RabbitMqHashConsumer(
-    IConnectionFactory connectionFactory,
+    IConnection connection,
     IServiceScopeFactory scopeFactory,
     ILogger<RabbitMqHashConsumer> logger,
     string queueName,
     ushort prefetchCount = 10,
     IDictionary<string, object?>? queueArguments = null)
-    : RabbitMqConsumer<HashBatchMessage>(connectionFactory, logger, queueName, prefetchCount, queueArguments)
+    : RabbitMqConsumer<HashBatchMessage>(connection, logger, queueName, prefetchCount, queueArguments)
 {
     protected override async Task HandleMessageAsync(
         HashBatchMessage message,

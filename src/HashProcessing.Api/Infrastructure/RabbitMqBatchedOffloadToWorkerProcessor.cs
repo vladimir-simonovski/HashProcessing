@@ -8,7 +8,7 @@ namespace HashProcessing.Api.Infrastructure;
 
 public class RabbitMqBatchedOffloadToWorkerProcessor : IHashProcessor
 {
-    private readonly IConnectionFactory _connectionFactory;
+    private readonly IConnection _connection;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ushort _degreeOfParallelism;
     private readonly ushort _channelCapacity;
@@ -17,7 +17,7 @@ public class RabbitMqBatchedOffloadToWorkerProcessor : IHashProcessor
     private readonly IDictionary<string, object?>? _queueArguments;
 
     public RabbitMqBatchedOffloadToWorkerProcessor(
-        IConnectionFactory connectionFactory,
+        IConnection connection,
         ILoggerFactory loggerFactory,
         ushort degreeOfParallelism,
         ushort batchSize,
@@ -25,7 +25,7 @@ public class RabbitMqBatchedOffloadToWorkerProcessor : IHashProcessor
         IDictionary<string, object?>? queueArguments = null,
         Func<ushort, ushort>? channelCapacitySelector = null)
     {
-        _connectionFactory = connectionFactory ?? throw new ArgumentNullException(nameof(connectionFactory));
+        _connection = connection ?? throw new ArgumentNullException(nameof(connection));
         _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
         
         _degreeOfParallelism = EnsureDegreeOfParallelism(degreeOfParallelism);
@@ -62,7 +62,6 @@ public class RabbitMqBatchedOffloadToWorkerProcessor : IHashProcessor
                 batchChannel.Writer,
                 ct);
 
-        await using var connection = await _connectionFactory.CreateConnectionAsync(ct);
         var publishingTasks = new List<Task<uint>>(_degreeOfParallelism);
         
         for (var i = 0; i < _degreeOfParallelism; i++)
@@ -131,7 +130,7 @@ public class RabbitMqBatchedOffloadToWorkerProcessor : IHashProcessor
         CancellationToken ct)
     {
         await using var publisher = new RabbitMqPublisher(
-            await _connectionFactory.CreateConnectionAsync(ct),
+            _connection,
             _loggerFactory.CreateLogger<RabbitMqPublisher>(),
             _queueName,
             _queueArguments

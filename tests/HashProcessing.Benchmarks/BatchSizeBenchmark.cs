@@ -44,7 +44,7 @@ public class BatchSizeBenchmark
         var reader = generator.StreamSha1s(HashCount);
 
         var processor = new RabbitMqBatchedOffloadToWorkerProcessor(
-            _fixture.ConnectionFactory,
+            _fixture.Connection,
             NullLoggerFactory.Instance,
             DegreeOfParallelism,
             BatchSize,

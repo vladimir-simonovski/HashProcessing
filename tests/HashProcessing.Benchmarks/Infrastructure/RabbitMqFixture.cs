@@ -10,6 +10,7 @@ public sealed class RabbitMqFixture : IAsyncDisposable
         .Build();
 
     public IConnectionFactory ConnectionFactory { get; private set; } = null!;
+    public IConnection Connection { get; private set; } = null!;
 
     public async Task StartAsync()
     {
@@ -20,18 +21,20 @@ public sealed class RabbitMqFixture : IAsyncDisposable
             Uri = new Uri(_container.GetConnectionString()),
             AutomaticRecoveryEnabled = true
         };
+
+        Connection = await ConnectionFactory.CreateConnectionAsync();
     }
 
     public async Task PurgeQueueAsync(string queueName, IDictionary<string, object?>? queueArguments = null)
     {
-        await using var connection = await ConnectionFactory.CreateConnectionAsync();
-        await using var channel = await connection.CreateChannelAsync();
+        await using var channel = await Connection.CreateChannelAsync();
         await channel.QueueDeclareAsync(queueName, durable: true, exclusive: false, autoDelete: false, arguments: queueArguments);
         await channel.QueuePurgeAsync(queueName);
     }
 
     public async ValueTask DisposeAsync()
     {
+        await Connection.DisposeAsync();
         await _container.DisposeAsync();
     }
 }

@@ -28,6 +28,9 @@ public static class ServiceCollectionExtensions
             NetworkRecoveryInterval = TimeSpan.FromSeconds(5)
         });
 
+        services.AddSingleton(sp =>
+            sp.GetRequiredService<IConnectionFactory>().CreateConnectionAsync().GetAwaiter().GetResult());
+
         services.AddDbContext<ApiDbContext>(options =>
             options.UseMySql(connectionString, new MariaDbServerVersion(new Version(11, 0))));
 
@@ -38,7 +41,7 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<IHashProcessor>(sp =>
             new RabbitMqBatchedOffloadToWorkerProcessor(
-                sp.GetRequiredService<IConnectionFactory>(),
+                sp.GetRequiredService<IConnection>(),
                 sp.GetRequiredService<ILoggerFactory>(),
                 degreeOfParallelism,
                 batchSize,
@@ -47,7 +50,7 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton(sp =>
             new HashDailyCountEventConsumer(
-                sp.GetRequiredService<IConnectionFactory>(),
+                sp.GetRequiredService<IConnection>(),
                 sp.GetRequiredService<IServiceScopeFactory>(),
                 sp.GetRequiredService<ILogger<HashDailyCountEventConsumer>>(),
                 consumeQueueName,
