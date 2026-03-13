@@ -29,6 +29,13 @@ public class HashRepository(HashDbContext db) : IHashRepository
         await _db.Database.ExecuteSqlRawAsync(sql, parameters, ct);
     }
 
-    public async Task<long> GetCountByDateAsync(DateOnly date, CancellationToken ct = default) 
-        => await _db.Hashes.CountAsync(h => h.Date == date, ct);
+    public async Task<IReadOnlyDictionary<DateOnly, long>> GetCountsByDatesAsync(
+        IReadOnlyCollection<DateOnly> dates,
+        CancellationToken ct = default)
+    {
+        return await _db.Hashes
+            .Where(h => dates.Contains(h.Date))
+            .GroupBy(h => h.Date)
+            .ToDictionaryAsync(g => g.Key, g => (long)g.Count(), ct);
+    }
 }

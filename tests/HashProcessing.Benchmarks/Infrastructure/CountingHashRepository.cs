@@ -29,8 +29,11 @@ public sealed class CountingHashRepository : IHashRepository
         return Task.CompletedTask;
     }
 
-    public Task<long> GetCountByDateAsync(DateOnly date, CancellationToken ct = default)
+    public Task<IReadOnlyDictionary<DateOnly, long>> GetCountsByDatesAsync(
+        IReadOnlyCollection<DateOnly> dates,
+        CancellationToken ct = default)
     {
-        return Task.FromResult(0L);
+        IReadOnlyDictionary<DateOnly, long> result = dates.ToDictionary(d => d, _ => 0L);
+        return Task.FromResult(result);
     }
 }

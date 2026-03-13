@@ -31,11 +31,13 @@ public class ProcessReceivedHashesCommandHandler(
     {
         await _repository.SaveBatchAsync(command.Entities, ct);
 
-        var date = command.Entities.First().Date;
-        var totalCount = await _repository.GetCountByDateAsync(date, ct);
-        await _publisher.PublishAsync(new HashDailyCountMessage(date, totalCount), ct);
+        var dates = command.Entities.Select(e => e.Date).Distinct().ToList();
+        var countsByDate = await _repository.GetCountsByDatesAsync(dates, ct);
 
-        _logger.LogDebug("Persisted batch of {Count} hashes, published daily count {TotalCount} for {Date}",
-            command.Entities.Count, totalCount, date);
+        await Task.WhenAll(countsByDate.Select(x =>
+            _publisher.PublishAsync(new HashDailyCountMessage(x.Key, x.Value), ct)));
+
+        _logger.LogDebug("Persisted batch of {Count} hashes, published daily counts for {DateCount} date(s)",
+            command.Entities.Count, countsByDate.Count);
     }
 }

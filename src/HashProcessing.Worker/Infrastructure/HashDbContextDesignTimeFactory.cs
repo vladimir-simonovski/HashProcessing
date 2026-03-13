@@ -1,8 +1,10 @@
+using JetBrains.Annotations;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 
 namespace HashProcessing.Worker.Infrastructure;
 
+[UsedImplicitly]
 public class HashDbContextDesignTimeFactory : IDesignTimeDbContextFactory<HashDbContext>
 {
     public HashDbContext CreateDbContext(string[] args)
