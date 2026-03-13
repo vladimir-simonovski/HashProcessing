@@ -11,7 +11,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using RabbitMQ.Client;
 
-namespace HashProcessing.Benchmarks;
+namespace HashProcessing.Benchmarks.Consumer;
 
 [MemoryDiagnoser]
 [SimpleJob(RunStrategy.Monitoring, warmupCount: 1, iterationCount: 3)]
@@ -24,7 +24,7 @@ public class PrefetchCountBenchmark
     private const string PublishQueueName = "benchmark-prefetch-hash-daily-counts";
 
     private RabbitMqFixture _fixture = null!;
-    private CountingHashRepository _countingRepository = null!;
+    private CompletionSignal _signal = null!;
     private RabbitMqHashConsumer _consumer = null!;
 
     [Params(1, 10, 25, 50, 250)]
@@ -45,15 +45,16 @@ public class PrefetchCountBenchmark
 
         PreloadMessagesAsync().GetAwaiter().GetResult();
 
-        _countingRepository = new CountingHashRepository();
-        _countingRepository.Reset(MessageCount);
+        _signal = new CompletionSignal();
+        _signal.Reset(MessageCount);
+        var countingRepository = new CountingHashRepository(_signal);
 
         var services = new ServiceCollection();
         services.AddSingleton(_fixture.ConnectionFactory);
         services.AddSingleton(_fixture.Connection);
         services.AddSingleton<ILoggerFactory>(NullLoggerFactory.Instance);
         services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
-        services.AddSingleton<IHashRepository>(_countingRepository);
+        services.AddSingleton<IHashRepository>(countingRepository);
         services.AddScoped<ProcessReceivedHashesCommandHandler>();
         services.AddScoped(sp =>
             new RabbitMqPublisher(
@@ -89,7 +90,7 @@ public class PrefetchCountBenchmark
             consumerTasks[i] = _consumer.ConsumeAsync(id, cts.Token);
         }
 
-        await _countingRepository.WaitAsync(cts.Token);
+        await _signal.WaitAsync(cts.Token);
 
         await cts.CancelAsync();
 

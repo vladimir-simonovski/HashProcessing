@@ -2,6 +2,7 @@ using System.Threading.Channels;
 using HashProcessing.Api.Core;
 using HashProcessing.Api.Infrastructure;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 using RabbitMQ.Client;
 
@@ -27,12 +28,19 @@ public class RabbitMqBatchedOffloadToWorkerProcessorShould
         
         var loggerFactory = Substitute.For<ILoggerFactory>();
 
+        var options = Substitute.For<IOptionsMonitor<HashProcessingOptions>>();
+        options.CurrentValue.Returns(new HashProcessingOptions
+        {
+            DegreeOfParallelism = 2,
+            BatchSize = 100,
+            PublishQueueName = "test-queue",
+            DeadLetterExchange = "dlx"
+        });
+
         var processor = new RabbitMqBatchedOffloadToWorkerProcessor(
             connection,
             loggerFactory,
-            degreeOfParallelism: 2,
-            batchSize: 100,
-            queueName: "test-queue"
+            options
         );
         
         var hashes = Enumerable.Range(0, 1000)

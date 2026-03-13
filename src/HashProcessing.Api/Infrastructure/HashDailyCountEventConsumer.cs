@@ -1,5 +1,6 @@
 using HashProcessing.Api.Application;
 using HashProcessing.Messaging;
+using Microsoft.Extensions.Options;
 using RabbitMQ.Client;
 
 namespace HashProcessing.Api.Infrastructure;
@@ -8,9 +9,12 @@ public class HashDailyCountEventConsumer(
     IConnection connection,
     IServiceScopeFactory scopeFactory,
     ILogger<HashDailyCountEventConsumer> logger,
-    string queueName,
-    IDictionary<string, object?>? queueArguments = null)
-    : RabbitMqConsumer<HashDailyCountMessage>(connection, logger, queueName, queueArguments: queueArguments)
+    IOptions<HashProcessingOptions> options)
+    : RabbitMqConsumer<HashDailyCountMessage>(
+        connection,
+        logger,
+        options.Value.ConsumeQueueName,
+        queueArguments: new Dictionary<string, object?> { ["x-dead-letter-exchange"] = options.Value.DeadLetterExchange })
 {
     protected override async Task HandleMessageAsync(
         HashDailyCountMessage message,

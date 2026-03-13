@@ -2,8 +2,9 @@ using System.Threading.Channels;
 using BenchmarkDotNet.Attributes;
 using HashProcessing.Api.Core;
 using HashProcessing.Api.Infrastructure;
+using Microsoft.Extensions.Options;
 
-namespace HashProcessing.Benchmarks;
+namespace HashProcessing.Benchmarks.Producer;
 
 [MemoryDiagnoser]
 public class HashGeneratorIsolatedBenchmark
@@ -14,7 +15,7 @@ public class HashGeneratorIsolatedBenchmark
     [Benchmark(Baseline = true)]
     public async Task<uint> Default_StreamSha1s()
     {
-        var generator = new DefaultHashGenerator(128);
+        var generator = new DefaultHashGenerator(Options.Create(new HashProcessingOptions()));
         var reader = generator.StreamSha1s(Count);
         return await DrainAsync(reader);
     }

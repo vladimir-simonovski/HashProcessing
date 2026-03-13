@@ -41,27 +41,7 @@
 
 Higher DOP improves `ParallelHashGenerator` throughput (DOP=8 is 1.7× faster than DOP=1), but `DefaultHashGenerator` at 40K in the full pipeline (60.3 ms) still outperforms the best parallel DOP (73.1 ms at DOP=8).
 
-## 3. Publish Batch Size (1M hashes, real RabbitMQ)
-
-`DefaultHashGenerator` with `RabbitMqBatchedOffloadToWorkerProcessor` at varying batch sizes (DOP=ProcessorCount).
-
-| BatchSize | Mean | Allocated |
-|---|---|---|
-| 10 | 6.924 s | 889.26 MB |
-| 50 | 1.400 s | 624.28 MB |
-| 100 | 1.425 s | 592.89 MB |
-| 250 | 1.521 s | 587.13 MB |
-| 500 | 1.485 s | 591.45 MB |
-| 1,000 | 1.454 s | 609.04 MB |
-| 2,000 | 1.492 s | 721.11 MB |
-| 5,000 | 1.495 s | 800.09 MB |
-| 10,000 | 1.519 s | 863.43 MB |
-| 20,000 | 1.592 s | 914.96 MB |
-| 40,000 | 1.615 s | 1,023.32 MB |
-
-Performance improves sharply from 10→50 (4.9× speedup), then plateaus across the 50–1,000 range (~1.40–1.49s). Batch size 50 achieves the lowest latency (1.400s). Beyond 1,000, latency drifts upward slightly (1.49–1.62s) while memory allocation grows steadily — from 587 MB at 250 to over 1 GB at 40K — due to larger per-publish payloads increasing GC pressure. Batch sizes 100–500 offer the best balance of throughput and memory efficiency.
-
-## 4. Consumer Prefetch Count (20K messages, 4 consumers, no-op persistence)
+## 3. Consumer Prefetch Count (20K messages, 4 consumers, no-op persistence)
 
 `RabbitMqHashConsumer` consuming 20K pre-loaded messages (10 hashes each, 200K total) with 4 parallel consumers and varying `prefetchCount`. Persistence is replaced with a no-op repository to isolate the RabbitMQ delivery/ack pipeline.
 
@@ -77,7 +57,7 @@ Performance improves sharply from 10→50 (4.9× speedup), then plateaus across 
 
 PrefetchCount=1 is the slowest (10.98s) due to per-message round-trip overhead — each consumer must wait for a broker ACK before receiving the next message. Increasing prefetch to 5 yields a measurable 4.5% improvement (10.48s) by allowing the broker to push messages ahead of acknowledgements. Beyond 5, performance converges into a narrow ~10.43–10.56s band, indicating the bottleneck shifts from message delivery to consumer-side processing (deserialization, command dispatch, downstream publish). PrefetchCount=25 achieved the lowest mean (10.43s, 5.0% faster than prefetch=1). Memory allocation is stable (~680 MB) across all values except PrefetchCount=250, which triggers significantly more Gen1/Gen2 collections due to larger in-flight message buffers. A prefetch count of 10–50 provides the best balance of throughput and memory efficiency.
 
-## 5. Full Pipeline (Generate → Batch → Publish to RabbitMQ)
+## 4. Full Pipeline (Generate → Batch → Publish to RabbitMQ)
 
 End-to-end with `RabbitMqBatchedOffloadToWorkerProcessor` (batchSize=500, DOP=ProcessorCount).
 
@@ -92,4 +72,32 @@ End-to-end with `RabbitMqBatchedOffloadToWorkerProcessor` (batchSize=500, DOP=Pr
 | Default_GenerateAndPublish | 100,000 | 147.4 ms | 1.00 | 63.62 MB |
 | Parallel_GenerateAndPublish | 100,000 | 161.5 ms | 1.10 | 64.73 MB |
 
-`DefaultHashGenerator` remains faster end-to-end. Parallel overhead (8–34%) is not recovered by overlapping with publishing. Using the throughput-optimal batch size of 500 (from §3) significantly improves pipeline throughput compared to smaller batch sizes.
+`DefaultHashGenerator` remains faster end-to-end. Parallel overhead (8–34%) is not recovered by overlapping with publishing. Using the throughput-optimal batch size of 500 significantly improves pipeline throughput compared to smaller batch sizes.
+
+## 6. End-to-End Roundtrip (API → RabbitMQ → Worker → DB → Daily Counts)
+
+Full roundtrip: HTTP POST `/hashes?count=40000` → generate hashes → batch-publish to RabbitMQ → Worker consumes, persists to MariaDB, publishes daily counts → API consumes daily count events. Varying batch sizes with `DefaultHashGenerator` (DOP=ProcessorCount). Uses `WebApplicationFactory` for the API and a real Worker host, both backed by Testcontainers (RabbitMQ + MariaDB).
+
+| BatchSize | Mean | Allocated |
+|---|---|---|
+| 50 | 21.784 s | 16,478.13 MB |
+| 100 | 10.840 s | 8,329.81 MB |
+| 250 | 4.579 s | 3,440.16 MB |
+| 500 | 2.387 s | 1,823.78 MB |
+| 1,000 | 1.423 s | 998.25 MB |
+
+Latency scales nearly linearly with batch size — doubling the batch roughly halves the roundtrip time — confirming that RabbitMQ message count (not payload size) dominates end-to-end cost. At BatchSize=50, the Worker must consume 800 messages (40K/50), while at BatchSize=1000 it only processes 40 messages. Memory allocation tracks proportionally: 50→1000 reduces allocations by 16×. BatchSize=1000 achieves the lowest latency (1.42s) and memory usage (998 MB). The full roundtrip adds significant overhead from Worker-side DB persistence (batch INSERTs into MariaDB) and the daily-count event loop compared to the producer-only pipeline (§4).
+
+## 7. High Batch Size E2E Roundtrip (200K hashes, batch sizes 500–10000)
+
+Same full-roundtrip setup as §6, scaled to 200K hashes with higher batch sizes to find the throughput plateau. HTTP POST `/hashes?count=200000` → generate → batch-publish → Worker consume/persist → daily count events.
+
+| BatchSize | Mean | Allocated |
+|---|---|---|
+| 500 | 76.096 s | 40.59 GB |
+| 1,000 | 37.848 s | 20.76 GB |
+| 2,000 | 20.899 s | 10.90 GB |
+| 5,000 | 9.116 s | 4.92 GB |
+| 10,000 | 5.333 s | 2.96 GB |
+
+The near-linear scaling observed in §6 continues at 200K hashes with no sign of plateau or degradation up to BatchSize=10000. Each doubling of batch size still roughly halves latency: 500→1000 (2.01×), 1000→2000 (1.81×), 2000→5000 (2.29×), 5000→10000 (1.71×). Memory allocation follows the same linear relationship — BatchSize=10000 allocates 13.7× less than BatchSize=500. At 200K hashes with BatchSize=10000, the Worker processes only 20 RabbitMQ messages, each containing 10K hashes, achieving 37.5K hashes/sec throughput. No diminishing returns are visible yet; the batch-size sweet spot for this workload is at or above 10000.

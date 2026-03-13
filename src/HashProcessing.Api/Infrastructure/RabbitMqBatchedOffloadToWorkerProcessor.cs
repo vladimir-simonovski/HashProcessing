@@ -1,6 +1,7 @@
 using System.Threading.Channels;
 using HashProcessing.Api.Core;
 using HashProcessing.Messaging;
+using Microsoft.Extensions.Options;
 using RabbitMQ.Client;
 using static HashProcessing.Api.Infrastructure.Util;
 
@@ -10,37 +11,16 @@ public class RabbitMqBatchedOffloadToWorkerProcessor : IHashProcessor
 {
     private readonly IConnection _connection;
     private readonly ILoggerFactory _loggerFactory;
-    private readonly ushort _degreeOfParallelism;
-    private readonly ushort _channelCapacity;
-    private readonly ushort _batchSize;
-    private readonly string _queueName;
-    private readonly IDictionary<string, object?>? _queueArguments;
+    private readonly IOptionsMonitor<HashProcessingOptions> _options;
 
     public RabbitMqBatchedOffloadToWorkerProcessor(
         IConnection connection,
         ILoggerFactory loggerFactory,
-        ushort degreeOfParallelism,
-        ushort batchSize,
-        string queueName,
-        IDictionary<string, object?>? queueArguments = null,
-        Func<ushort, ushort>? channelCapacitySelector = null)
+        IOptionsMonitor<HashProcessingOptions> options)
     {
         _connection = connection ?? throw new ArgumentNullException(nameof(connection));
         _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
-        
-        _degreeOfParallelism = EnsureDegreeOfParallelism(degreeOfParallelism);
-
-        var requestedCapacity =
-            channelCapacitySelector?.Invoke(_degreeOfParallelism) ?? (ushort)(_degreeOfParallelism * 2);
-        _channelCapacity = EnsureChannelCapacity(requestedCapacity);
-
-        ArgumentOutOfRangeException.ThrowIfZero(batchSize);
-        _batchSize = batchSize;
-
-        ArgumentException.ThrowIfNullOrWhiteSpace(queueName);
-        _queueName = queueName;
-
-        _queueArguments = queueArguments;
+        _options = options ?? throw new ArgumentNullException(nameof(options));
     }
 
     public async Task<ProcessResult> ProcessAsync<THash>(
@@ -48,8 +28,16 @@ public class RabbitMqBatchedOffloadToWorkerProcessor : IHashProcessor
         CancellationToken ct = default)
         where THash : IGeneratedHash
     {
+        var opts = _options.CurrentValue;
+        ArgumentOutOfRangeException.ThrowIfZero(opts.BatchSize);
+        ArgumentException.ThrowIfNullOrWhiteSpace(opts.PublishQueueName);
+
+        var degreeOfParallelism = EnsureDegreeOfParallelism(opts.DegreeOfParallelism);
+        var channelCapacity = EnsureChannelCapacity((ushort)(degreeOfParallelism * 2));
+        var queueArguments = new Dictionary<string, object?> { ["x-dead-letter-exchange"] = opts.DeadLetterExchange };
+
         var batchChannel = Channel.CreateBounded<IGeneratedHash[]>(
-            new BoundedChannelOptions(_channelCapacity)
+            new BoundedChannelOptions(channelCapacity)
             {
                 SingleWriter = true,
                 SingleReader = false,
@@ -60,12 +48,13 @@ public class RabbitMqBatchedOffloadToWorkerProcessor : IHashProcessor
             = StartBatchChannelStreaming(
                 hashChannelReader,
                 batchChannel.Writer,
+                opts.BatchSize,
                 ct);
 
-        var publishingTasks = new List<Task<uint>>(_degreeOfParallelism);
-        
-        for (var i = 0; i < _degreeOfParallelism; i++)
-            publishingTasks.Add(PublishAsync(batchChannel.Reader, ct));
+        var publishingTasks = new List<Task<uint>>(degreeOfParallelism);
+
+        for (var i = 0; i < degreeOfParallelism; i++)
+            publishingTasks.Add(PublishAsync(batchChannel.Reader, opts.PublishQueueName, queueArguments, ct));
 
         var publishResults = await Task.WhenAll(publishingTasks);
 
@@ -77,6 +66,7 @@ public class RabbitMqBatchedOffloadToWorkerProcessor : IHashProcessor
     private TaskCompletionSource<uint> StartBatchChannelStreaming<THash>(
         ChannelReader<THash> hashChannelReader,
         ChannelWriter<IGeneratedHash[]> batchChannelWriter,
+        ushort batchSize,
         CancellationToken ct) where THash : IGeneratedHash
     {
         var tcsStreaming = new TaskCompletionSource<uint>();
@@ -87,16 +77,16 @@ public class RabbitMqBatchedOffloadToWorkerProcessor : IHashProcessor
 
             try
             {
-                var batch = new List<IGeneratedHash>(_batchSize);
+                var batch = new List<IGeneratedHash>(batchSize);
 
                 while (await hashChannelReader.WaitToReadAsync(ct))
                 {
-                    while (batch.Count < _batchSize && hashChannelReader.TryRead(out var hash))
+                    while (batch.Count < batchSize && hashChannelReader.TryRead(out var hash))
                     {
                         batch.Add(hash);
                     }
 
-                    if (batch.Count < _batchSize) continue;
+                    if (batch.Count < batchSize) continue;
 
                     await batchChannelWriter.WriteAsync(batch.ToArray(), ct);
                     streamedCount += (uint)batch.Count;
@@ -127,13 +117,15 @@ public class RabbitMqBatchedOffloadToWorkerProcessor : IHashProcessor
 
     private async Task<uint> PublishAsync(
         ChannelReader<IGeneratedHash[]> batchChannelReader,
+        string queueName,
+        IDictionary<string, object?>? queueArguments,
         CancellationToken ct)
     {
         await using var publisher = new RabbitMqPublisher(
             _connection,
             _loggerFactory.CreateLogger<RabbitMqPublisher>(),
-            _queueName,
-            _queueArguments
+            queueName,
+            queueArguments
         );
 
         var publishedCount = 0u;

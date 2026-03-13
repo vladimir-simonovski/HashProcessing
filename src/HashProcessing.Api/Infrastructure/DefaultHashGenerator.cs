@@ -1,12 +1,14 @@
 using System.Threading.Channels;
 using HashProcessing.Api.Core;
+using Microsoft.Extensions.Options;
 using static HashProcessing.Api.Infrastructure.Util;
 
 namespace HashProcessing.Api.Infrastructure;
 
-public class DefaultHashGenerator(ushort channelCapacity) : IHashGenerator
+public class DefaultHashGenerator(IOptions<HashProcessingOptions> options) : IHashGenerator
 {
-    private readonly ushort _channelCapacity = EnsureChannelCapacity(channelCapacity);
+    private readonly ushort _channelCapacity = EnsureChannelCapacity(
+        (options ?? throw new ArgumentNullException(nameof(options))).Value.ChannelCapacity);
 
     public ChannelReader<Sha1Hash> StreamSha1s(uint count, CancellationToken cancellationToken = default)
     {

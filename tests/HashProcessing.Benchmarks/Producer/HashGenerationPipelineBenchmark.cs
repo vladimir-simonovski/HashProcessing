@@ -3,14 +3,14 @@ using HashProcessing.Api.Core;
 using HashProcessing.Api.Infrastructure;
 using HashProcessing.Benchmarks.Infrastructure;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 
-namespace HashProcessing.Benchmarks;
+namespace HashProcessing.Benchmarks.Producer;
 
 [MemoryDiagnoser]
 public class HashGenerationPipelineBenchmark
 {
     private const ushort BatchSize = 500;
-    private const ushort ChannelCapacity = 128;
     private const ushort DegreeOfParallelism = 0; // ProcessorCount
     private const string QueueName = "benchmark-hash-processing";
 
@@ -26,12 +26,17 @@ public class HashGenerationPipelineBenchmark
         _fixture = new RabbitMqFixture();
         await _fixture.StartAsync();
 
+        var options = new StaticOptionsMonitor<HashProcessingOptions>(new HashProcessingOptions
+        {
+            DegreeOfParallelism = DegreeOfParallelism,
+            BatchSize = BatchSize,
+            PublishQueueName = QueueName
+        });
+
         _processor = new RabbitMqBatchedOffloadToWorkerProcessor(
             _fixture.Connection,
             NullLoggerFactory.Instance,
-            DegreeOfParallelism,
-            BatchSize,
-            QueueName);
+            options);
     }
 
     [IterationSetup]
@@ -49,7 +54,7 @@ public class HashGenerationPipelineBenchmark
     [Benchmark(Baseline = true)]
     public async Task<ProcessResult> Default_GenerateAndPublish()
     {
-        var generator = new DefaultHashGenerator(ChannelCapacity);
+        var generator = new DefaultHashGenerator(Options.Create(new HashProcessingOptions()));
         var reader = generator.StreamSha1s(Count);
         return await _processor.ProcessAsync(reader);
     }

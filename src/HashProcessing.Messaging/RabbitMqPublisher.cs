@@ -19,7 +19,7 @@ public class RabbitMqPublisher(
     private readonly string _queueName = !string.IsNullOrWhiteSpace(queueName)
         ? queueName
         : throw new ArgumentException("Queue name must not be null or whitespace.", nameof(queueName));
-    private readonly IDictionary<string, object?>? _queueArguments = queueArguments;
+
     private IChannel? _channel;
 
     private readonly ResiliencePipeline _retryPipeline = new ResiliencePipelineBuilder()
@@ -94,7 +94,7 @@ public class RabbitMqPublisher(
             durable: true,
             exclusive: false,
             autoDelete: false,
-            arguments: _queueArguments,
+            arguments: queueArguments,
             cancellationToken: ct);
 
         return _channel;

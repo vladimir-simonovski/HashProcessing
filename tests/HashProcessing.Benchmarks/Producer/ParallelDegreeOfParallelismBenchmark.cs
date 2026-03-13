@@ -4,7 +4,7 @@ using HashProcessing.Api.Infrastructure;
 using HashProcessing.Benchmarks.Infrastructure;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace HashProcessing.Benchmarks;
+namespace HashProcessing.Benchmarks.Producer;
 
 [MemoryDiagnoser]
 public class ParallelDegreeOfParallelismBenchmark
@@ -43,12 +43,17 @@ public class ParallelDegreeOfParallelismBenchmark
         var generator = new ParallelHashGenerator(DegreeOfParallelism, null);
         var reader = generator.StreamSha1s(HashCount);
 
+        var options = new StaticOptionsMonitor<HashProcessingOptions>(new HashProcessingOptions
+        {
+            DegreeOfParallelism = DegreeOfParallelism,
+            BatchSize = BatchSize,
+            PublishQueueName = QueueName
+        });
+
         var processor = new RabbitMqBatchedOffloadToWorkerProcessor(
             _fixture.Connection,
             NullLoggerFactory.Instance,
-            DegreeOfParallelism,
-            BatchSize,
-            QueueName);
+            options);
 
         return await processor.ProcessAsync(reader);
     }
