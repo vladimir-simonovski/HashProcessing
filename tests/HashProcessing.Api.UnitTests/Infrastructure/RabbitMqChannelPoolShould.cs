@@ -108,7 +108,7 @@ public class RabbitMqChannelPoolShould
         var callIndex = 0;
         var connection = Substitute.For<IConnection>();
         connection.CreateChannelAsync(Arg.Any<CreateChannelOptions?>(), Arg.Any<CancellationToken>())
-            .Returns(ci =>
+            .Returns(_ =>
             {
                 var idx = Interlocked.Increment(ref callIndex) - 1;
                 return idx < channels.Length
@@ -159,7 +159,7 @@ public class RabbitMqChannelPoolShould
         var callIndex = 0;
         var connection = Substitute.For<IConnection>();
         connection.CreateChannelAsync(Arg.Any<CreateChannelOptions?>(), Arg.Any<CancellationToken>())
-            .Returns(ci =>
+            .Returns(_ =>
             {
                 var idx = Interlocked.Increment(ref callIndex) - 1;
                 return idx < channels.Length
