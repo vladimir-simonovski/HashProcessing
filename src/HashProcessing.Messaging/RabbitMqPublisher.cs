@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net.Sockets;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
@@ -14,6 +15,7 @@ public class RabbitMqPublisher(
 {
     private readonly PublisherChannelPool _channelPool = channelPool ?? throw new ArgumentNullException(nameof(channelPool));
     private readonly ILogger<RabbitMqPublisher> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    private readonly ConcurrentDictionary<string, byte> _declaredQueues = new();
 
     private readonly ResiliencePipeline _retryPipeline = new ResiliencePipelineBuilder()
         .AddRetry(new RetryStrategyOptions
@@ -59,13 +61,24 @@ public class RabbitMqPublisher(
             await using var lease = await _channelPool.AcquireAsync(token);
             var channel = lease.Channel;
 
-            await channel.QueueDeclareAsync(
-                queueName,
-                durable: true,
-                exclusive: false,
-                autoDelete: false,
-                arguments: queueArguments?.ToDictionary(),
-                cancellationToken: token);
+            if (_declaredQueues.TryAdd(queueName, 0))
+            {
+                try
+                {
+                    await channel.QueueDeclareAsync(
+                        queueName,
+                        durable: true,
+                        exclusive: false,
+                        autoDelete: false,
+                        arguments: queueArguments?.ToDictionary(),
+                        cancellationToken: token);
+                }
+                catch
+                {
+                    _declaredQueues.TryRemove(queueName, out _);
+                    throw;
+                }
+            }
 
             await channel.BasicPublishAsync(
                 exchange: string.Empty,

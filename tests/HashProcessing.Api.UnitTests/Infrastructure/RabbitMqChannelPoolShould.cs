@@ -87,4 +87,170 @@ public class RabbitMqChannelPoolShould
             Arg.Any<Exception?>(),
             Arg.Any<Func<object, Exception?, string>>());
     }
+
+    [Fact]
+    public async Task AcquireAsync_ConcurrentPublishers_ReuseChannelsWithoutExcessiveCreation()
+    {
+        // Arrange — pool of 4, 8 concurrent publishers each doing 10 publishes
+        const int poolSize = 4;
+        const int concurrency = 8;
+        const int publishesPerThread = 10;
+
+        var channels = Enumerable.Range(0, poolSize)
+            .Select(_ =>
+            {
+                var ch = Substitute.For<IChannel>();
+                ch.IsOpen.Returns(true);
+                return ch;
+            })
+            .ToArray();
+
+        var callIndex = 0;
+        var connection = Substitute.For<IConnection>();
+        connection.CreateChannelAsync(Arg.Any<CreateChannelOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(ci =>
+            {
+                var idx = Interlocked.Increment(ref callIndex) - 1;
+                return idx < channels.Length
+                    ? channels[idx]
+                    : throw new InvalidOperationException(
+                        $"Created {idx + 1} channels but pool should cap at {poolSize}");
+            });
+
+        var pool = new PublisherChannelPool(
+            connection,
+            NullLoggerFactory.Instance.CreateLogger<PublisherChannelPool>(),
+            maxSize: poolSize);
+
+        // Act — 8 threads each acquire/release 10 times
+        var tasks = Enumerable.Range(0, concurrency).Select(_ => Task.Run(async () =>
+        {
+            for (var i = 0; i < publishesPerThread; i++)
+            {
+                await using var lease = await pool.AcquireAsync();
+                // simulate publish work
+                await Task.Yield();
+            }
+        }));
+
+        await Task.WhenAll(tasks);
+
+        // Assert — at most poolSize channels created, all reused
+        await connection.Received(poolSize)
+            .CreateChannelAsync(Arg.Any<CreateChannelOptions?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task AcquireAsync_ConcurrentConsumers_ReuseChannelsWithoutExcessiveCreation()
+    {
+        // Arrange — pool of 4, 4 long-lived consumers each holding a channel
+        const int poolSize = 4;
+        const int consumerCount = 4;
+
+        var channels = Enumerable.Range(0, poolSize)
+            .Select(_ =>
+            {
+                var ch = Substitute.For<IChannel>();
+                ch.IsOpen.Returns(true);
+                return ch;
+            })
+            .ToArray();
+
+        var callIndex = 0;
+        var connection = Substitute.For<IConnection>();
+        connection.CreateChannelAsync(Arg.Any<CreateChannelOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(ci =>
+            {
+                var idx = Interlocked.Increment(ref callIndex) - 1;
+                return idx < channels.Length
+                    ? channels[idx]
+                    : throw new InvalidOperationException(
+                        $"Created {idx + 1} channels but pool should cap at {poolSize}");
+            });
+
+        var pool = new ConsumerChannelPool(
+            connection,
+            NullLoggerFactory.Instance.CreateLogger<ConsumerChannelPool>(),
+            maxSize: poolSize);
+
+        // Act — all consumers acquire simultaneously, hold, then release
+        var leases = await Task.WhenAll(
+            Enumerable.Range(0, consumerCount)
+                .Select(_ => pool.AcquireAsync()));
+
+        foreach (var lease in leases)
+            await lease.DisposeAsync();
+
+        // Re-acquire — should reuse, no new channels
+        var reacquired = await Task.WhenAll(
+            Enumerable.Range(0, consumerCount)
+                .Select(_ => pool.AcquireAsync()));
+
+        foreach (var lease in reacquired)
+            await lease.DisposeAsync();
+
+        // Assert — exactly poolSize channels created total (reused on second round)
+        await connection.Received(poolSize)
+            .CreateChannelAsync(Arg.Any<CreateChannelOptions?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Return_WhenChannelClosedDuringUse_DoesNotCauseExcessiveRecreation()
+    {
+        // Arrange — simulates daily-count publisher scenario:
+        // channel closes mid-use, pool should create ONE replacement, not recreate every time
+        const int poolSize = 2;
+        const int totalPublishes = 20;
+
+        var liveChannel = Substitute.For<IChannel>();
+        liveChannel.IsOpen.Returns(true);
+
+        var dyingChannel = Substitute.For<IChannel>();
+        dyingChannel.IsOpen.Returns(true);
+
+        var replacementChannel = Substitute.For<IChannel>();
+        replacementChannel.IsOpen.Returns(true);
+
+        var connection = Substitute.For<IConnection>();
+        connection.CreateChannelAsync(Arg.Any<CreateChannelOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(liveChannel, dyingChannel, replacementChannel);
+
+        var pool = new PublisherChannelPool(
+            connection,
+            NullLoggerFactory.Instance.CreateLogger<PublisherChannelPool>(),
+            maxSize: poolSize);
+
+        // Act — acquire both channels
+        var lease1 = await pool.AcquireAsync();
+        var lease2 = await pool.AcquireAsync();
+        Assert.Same(liveChannel, lease1.Channel);
+        Assert.Same(dyingChannel, lease2.Channel);
+
+        // Simulate channel dying before return
+        dyingChannel.IsOpen.Returns(false);
+        await lease1.DisposeAsync();
+        await lease2.DisposeAsync(); // closed channel — dropped from pool
+
+        // Continue publishing with 2 concurrent acquires to force replacement creation
+        var leaseA = await pool.AcquireAsync(); // gets liveChannel from queue
+        var leaseB = await pool.AcquireAsync(); // queue empty → creates replacementChannel
+        Assert.Same(liveChannel, leaseA.Channel);
+        Assert.Same(replacementChannel, leaseB.Channel);
+        await leaseA.DisposeAsync();
+        await leaseB.DisposeAsync();
+
+        // Now both healthy channels are in the pool — sequential publishes should reuse them
+        for (var i = 0; i < totalPublishes; i++)
+        {
+            await using var lease = await pool.AcquireAsync();
+            Assert.True(
+                ReferenceEquals(lease.Channel, liveChannel) ||
+                ReferenceEquals(lease.Channel, replacementChannel),
+                "Unexpected channel instance — pool is recreating channels excessively");
+        }
+
+        // Assert — exactly 3 channels created: 2 initial + 1 replacement for the dead one
+        await connection.Received(3)
+            .CreateChannelAsync(Arg.Any<CreateChannelOptions?>(), Arg.Any<CancellationToken>());
+    }
 }

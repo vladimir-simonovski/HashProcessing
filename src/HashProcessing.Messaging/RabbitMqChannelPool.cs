@@ -59,7 +59,9 @@ public class RabbitMqChannelPool : IAsyncDisposable
 
     private void Return(IChannel channel)
     {
-        _available.Enqueue(channel);
+        if (channel.IsOpen)
+            _available.Enqueue(channel);
+
         _semaphore.Release();
     }
 

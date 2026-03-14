@@ -74,7 +74,7 @@ End-to-end with `RabbitMqBatchedOffloadToWorkerProcessor` (batchSize=500, DOP=Pr
 
 `DefaultHashGenerator` remains faster end-to-end. Parallel overhead (8–34%) is not recovered by overlapping with publishing. Using the throughput-optimal batch size of 500 significantly improves pipeline throughput compared to smaller batch sizes.
 
-## 6. End-to-End Roundtrip (API → RabbitMQ → Worker → DB → Daily Counts)
+## 5. End-to-End Roundtrip (API → RabbitMQ → Worker → DB → Daily Counts)
 
 Full roundtrip: HTTP POST `/hashes?count=40000` → generate hashes → batch-publish to RabbitMQ → Worker consumes, persists to MariaDB, publishes daily counts → API consumes daily count events. Varying batch sizes with `DefaultHashGenerator` (DOP=ProcessorCount). Uses `WebApplicationFactory` for the API and a real Worker host, both backed by Testcontainers (RabbitMQ + MariaDB).
 
@@ -88,7 +88,7 @@ Full roundtrip: HTTP POST `/hashes?count=40000` → generate hashes → batch-pu
 
 Latency scales nearly linearly with batch size — doubling the batch roughly halves the roundtrip time — confirming that RabbitMQ message count (not payload size) dominates end-to-end cost. At BatchSize=50, the Worker must consume 800 messages (40K/50), while at BatchSize=1000 it only processes 40 messages. Memory allocation tracks proportionally: 50→1000 reduces allocations by 16×. BatchSize=1000 achieves the lowest latency (1.42s) and memory usage (998 MB). The full roundtrip adds significant overhead from Worker-side DB persistence (batch INSERTs into MariaDB) and the daily-count event loop compared to the producer-only pipeline (§4).
 
-## 7. High Batch Size E2E Roundtrip (200K hashes, batch sizes 500–10000)
+## 6. High Batch Size E2E Roundtrip (200K hashes, batch sizes 500–10000)
 
 Same full-roundtrip setup as §6, scaled to 200K hashes with higher batch sizes to find the throughput plateau. HTTP POST `/hashes?count=200000` → generate → batch-publish → Worker consume/persist → daily count events.
 
