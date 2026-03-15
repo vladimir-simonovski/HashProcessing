@@ -6,7 +6,7 @@ public partial record Sha1Hash : IGeneratedHash
 {
     public Sha1Hash(string Value)
     {
-        if(string.IsNullOrWhiteSpace(Value))
+        if (string.IsNullOrWhiteSpace(Value))
             throw new ArgumentException("Value cannot be null or whitespace.", nameof(Value));
 
         if (!Sha1Regex().IsMatch(Value))

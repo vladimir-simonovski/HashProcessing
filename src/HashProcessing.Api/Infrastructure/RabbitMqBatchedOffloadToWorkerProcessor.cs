@@ -8,18 +8,18 @@ namespace HashProcessing.Api.Infrastructure;
 
 public class RabbitMqBatchedOffloadToWorkerProcessor(
     RabbitMqPublisher publisher,
-    IOptionsMonitor<HashProcessingOptions> options)
+    IOptions<HashProcessingOptions> options)
     : IHashProcessor
 {
     private readonly RabbitMqPublisher _publisher = publisher ?? throw new ArgumentNullException(nameof(publisher));
-    private readonly IOptionsMonitor<HashProcessingOptions> _options = options ?? throw new ArgumentNullException(nameof(options));
+    private readonly IOptions<HashProcessingOptions> _options = options ?? throw new ArgumentNullException(nameof(options));
 
     public async Task<ProcessResult> ProcessAsync<THash>(
         ChannelReader<THash> hashChannelReader,
         CancellationToken ct = default)
         where THash : IGeneratedHash
     {
-        var opts = _options.CurrentValue;
+        var opts = _options.Value;
         ArgumentOutOfRangeException.ThrowIfZero(opts.BatchSize);
 
         var degreeOfParallelism = EnsureDegreeOfParallelism(opts.DegreeOfParallelism);
@@ -56,7 +56,7 @@ public class RabbitMqBatchedOffloadToWorkerProcessor(
         ChannelWriter<IGeneratedHash[]> batchChannelWriter,
         CancellationToken ct) where THash : IGeneratedHash
     {
-        var batchSize = _options.CurrentValue.BatchSize;
+        var batchSize = _options.Value.BatchSize;
         var tcsStreaming = new TaskCompletionSource<uint>();
         
         _ = Task.Run(async () =>
@@ -107,7 +107,7 @@ public class RabbitMqBatchedOffloadToWorkerProcessor(
         ChannelReader<IGeneratedHash[]> batchChannelReader,
         CancellationToken ct)
     {
-        var opts = _options.CurrentValue;
+        var opts = _options.Value;
         var queueName = opts.PublishQueueName;
         var queueArguments = new QueueArguments { DeadLetterExchange = opts.DeadLetterExchange };
 

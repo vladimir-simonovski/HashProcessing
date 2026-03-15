@@ -2,8 +2,6 @@ using HashProcessing.Api.Core;
 
 namespace HashProcessing.Api.Application;
 
-public record GetHashesQuery;
-
 public record HashesResponse(IReadOnlyCollection<HashDateCount> Hashes);
 public record HashDateCount(string Date, long Count);
 

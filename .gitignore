@@ -470,3 +470,6 @@ Desktop.ini
 
 # Temporary Python virtual environment folders
 .venv/
+
+# Copilot
+.github/copilot/memories/

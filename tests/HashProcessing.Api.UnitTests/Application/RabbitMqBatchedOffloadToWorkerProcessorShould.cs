@@ -36,8 +36,8 @@ public class RabbitMqBatchedOffloadToWorkerProcessorShould
             publisherPool,
             NullLoggerFactory.Instance.CreateLogger<RabbitMqPublisher>());
 
-        var options = Substitute.For<IOptionsMonitor<HashProcessingOptions>>();
-        options.CurrentValue.Returns(new HashProcessingOptions
+        var options = Substitute.For<IOptions<HashProcessingOptions>>();
+        options.Value.Returns(new HashProcessingOptions
         {
             DegreeOfParallelism = 2,
             BatchSize = 100,

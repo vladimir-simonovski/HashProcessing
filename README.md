@@ -2,7 +2,7 @@
 
 A distributed SHA-1 hash generation and processing pipeline built with .NET 8, RabbitMQ, and Docker. The API generates hashes, batches them, and publishes to a message queue for parallel consumption by a worker service, which persists them and publishes daily count aggregations back to the API.
 
-[Overview](#overview) · [Architecture](#architecture) · [Getting started](#getting-started) · [API](#api) · [Project structure](#project-structure)
+[Overview](#overview) · [Architecture](#architecture) · [Design decisions](#design-decisions) · [Getting started](#getting-started) · [API](#api) · [Project structure](#project-structure)
 
 ## Overview
 
@@ -69,7 +69,7 @@ Core (Domain)  ←  Application  ←  Infrastructure
 | Layer | Responsibility | Key types |
 |---|---|---|
 | **Core** | Value objects, domain service ports | `Sha1Hash`, `IGeneratedHash`, `IHashGenerator`, `IHashProcessor`, `IHashDailyCountRepository`, `HashDailyCount` |
-| **Application** | Use-case handlers (CQRS) | `GenerateHashesCommand`, `GetHashesQuery`, `UpsertHashDailyCountCommand` + handlers |
+| **Application** | Use-case handlers (CQRS) | `GenerateHashesCommand`, `UpsertHashDailyCountCommand` + handlers |
 | **Infrastructure** | Concrete implementations, consumers | `DefaultHashGenerator`, `ParallelHashGenerator`, `RabbitMqBatchedOffloadToWorkerProcessor`, `HashDailyCountRepository`, `HashDailyCountEventConsumer`, `ApiDbContext` |
 
 **Worker layers:**
@@ -239,6 +239,7 @@ Performance benchmarks use [BenchmarkDotNet](https://benchmarkdotnet.org/) with 
 | `ParallelDegreeOfParallelismBenchmark` | Optimal `ParallelHashGenerator` degree of parallelism (1, 2, 4, 8, ProcessorCount) at 40K hashes with real RabbitMQ | Yes |
 | `BatchSizeBenchmark` | Optimal RabbitMQ publish batch size (10–40K) at 1M hashes with real RabbitMQ | Yes |
 | `PrefetchCountBenchmark` | Optimal RabbitMQ consumer prefetch count (1–250) with 4 parallel consumers processing 20K batches | Yes |
+| `HighBatchSizeBenchmark` | Full end-to-end roundtrip: HTTP POST 200K hashes with varying batch sizes (500–10K), measuring total pipeline time with real RabbitMQ + MariaDB + Worker | Yes |
 
 ### Running benchmarks
 
@@ -254,6 +255,9 @@ dotnet run -c Release --project tests/HashProcessing.Benchmarks -- --filter *Pip
 
 # Run only the batch size benchmark
 dotnet run -c Release --project tests/HashProcessing.Benchmarks -- --filter *BatchSize*
+
+# Run only the end-to-end high batch size benchmark
+dotnet run -c Release --project tests/HashProcessing.Benchmarks -- --filter *HighBatchSize*
 
 # Quick validation (dry run, no actual measurement)
 dotnet run -c Release --project tests/HashProcessing.Benchmarks -- --job dry
@@ -292,6 +296,37 @@ HashProcessing/
     ├── HashProcessing.Benchmarks/       # BenchmarkDotNet + Testcontainers
     └── HashProcessing.IntegrationTests/ # xUnit + Testcontainers
 ```
+
+## Design decisions
+
+### Raw SQL over EF Core ORM for bulk operations
+
+The Worker's `HashRepository` uses `INSERT IGNORE` instead of EF Core's `AddRange`/`SaveChangesAsync`. With batches of up to 10,000 hashes, a single `INSERT IGNORE` statement eliminates per-row change-tracker overhead entirely. The API's `HashDailyCountRepository` uses `INSERT ... ON DUPLICATE KEY UPDATE count = GREATEST(count, ?)` for atomic upserts — `GREATEST` prevents count rollback when concurrent workers publish overlapping aggregations for the same date.
+
+### Event-driven daily count aggregation
+
+The challenge requires daily hash counts "without recalculating on the fly." Rather than running `COUNT(*)` on a table that can grow to millions of rows, the system uses event-driven aggregation: after each batch insert, the Worker queries the count per date and publishes a `HashDailyCountMessage` to a dedicated `hash-daily-counts` queue. The API consumes these events and upserts into a small `hash_daily_counts` table, making `GET /hashes` a trivial read.
+
+### Separate databases per service
+
+The API and Worker each use their own MariaDB logical database (`api` and `worker`). This avoids shared-database coupling, prevents schema collisions, and allows independent scaling or migration.
+
+### RabbitMQ channel pool
+
+A semaphore-gated `RabbitMqChannelPool` (sized to `Environment.ProcessorCount × 2`) manages channel lifecycle. Channels are returned to a `ConcurrentQueue` on disposal and health-checked on acquire. The `PublisherChannelPool` subclass enables publisher confirmations and tracking, ensuring the broker acknowledges every published message.
+
+### Messaging resilience
+
+Multiple layers protect against message loss:
+
+- **Polly retry pipeline** — 3 attempts with exponential backoff (200 ms base) for transient broker/network exceptions (`AlreadyClosedException`, `BrokerUnreachableException`, `IOException`, `SocketException`)
+- **Persistent delivery mode** — all published messages are marked `Persistent = true`, surviving broker restarts
+- **Dead-letter queues** — both `hash-processing` and `hash-daily-counts` queues route nacked messages to per-queue DLQs via a `dlx` direct exchange, declared in `rabbitmq/definitions.json`
+- **Manual acknowledgement** — `autoAck: false` with explicit `BasicAckAsync` on success and `BasicNackAsync` (requeue: false) on failure, routing poison messages to the DLQ
+
+### ParallelHashGenerator as a benchmark-only alternative
+
+`ParallelHashGenerator` uses `Parallel.ForAsync` for multi-threaded SHA-1 generation but is **not registered in DI** — only `DefaultHashGenerator` runs in production. Benchmarks consistently show the parallel variant is 10–17% slower due to thread coordination overhead outweighing the lightweight SHA-1 computation. It remains in the codebase as a documented experiment and benchmark comparison point.
 
 ## Tech stack
 

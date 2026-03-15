@@ -5,6 +5,7 @@ using HashProcessing.Benchmarks.Infrastructure;
 using HashProcessing.Messaging;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 
 namespace HashProcessing.Benchmarks.Producer;
 
@@ -14,6 +15,11 @@ public class ParallelDegreeOfParallelismBenchmark
     private const ushort BatchSize = 100;
     private const uint HashCount = 40_000;
     private const string QueueName = "benchmark-dop-hash-processing";
+
+    private static readonly QueueArguments QueueArguments = new()
+    {
+        DeadLetterExchange = "dlx"
+    };
 
     private RabbitMqFixture _fixture = null!;
 
@@ -30,7 +36,7 @@ public class ParallelDegreeOfParallelismBenchmark
     [IterationSetup]
     public void IterationSetup()
     {
-        _fixture.PurgeQueueAsync(QueueName).GetAwaiter().GetResult();
+        _fixture.PurgeQueueAsync(QueueName, QueueArguments).GetAwaiter().GetResult();
     }
 
     [GlobalCleanup]
@@ -45,7 +51,7 @@ public class ParallelDegreeOfParallelismBenchmark
         var generator = new ParallelHashGenerator(DegreeOfParallelism, null);
         var reader = generator.StreamSha1s(HashCount);
 
-        var options = new StaticOptionsMonitor<HashProcessingOptions>(new HashProcessingOptions
+        var options = Options.Create(new HashProcessingOptions
         {
             DegreeOfParallelism = DegreeOfParallelism,
             BatchSize = BatchSize,

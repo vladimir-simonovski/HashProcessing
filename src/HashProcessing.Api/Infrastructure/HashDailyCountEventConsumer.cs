@@ -13,7 +13,7 @@ public class HashDailyCountEventConsumer(
         channelPool,
         logger,
         options.Value.ConsumeQueueName,
-        queueArguments: new QueueArguments{DeadLetterExchange =  options.Value.DeadLetterExchange})
+        queueArguments: new QueueArguments { DeadLetterExchange = options.Value.DeadLetterExchange })
 {
     protected override async Task HandleMessageAsync(
         HashDailyCountMessage message,

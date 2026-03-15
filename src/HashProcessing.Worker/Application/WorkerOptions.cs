@@ -1,4 +1,4 @@
-namespace HashProcessing.Worker.Infrastructure;
+namespace HashProcessing.Worker.Application;
 
 public class WorkerOptions
 {

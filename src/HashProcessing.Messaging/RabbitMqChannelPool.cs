@@ -18,14 +18,14 @@ public class RabbitMqChannelPool : IAsyncDisposable
         int maxSize = 0)
     {
         _connection = connection ?? throw new ArgumentNullException(nameof(connection));
-        var logger1 = logger ?? throw new ArgumentNullException(nameof(logger));
+        ArgumentNullException.ThrowIfNull(logger);
         _channelOptions = channelOptions;
 
         if (maxSize <= 0)
             maxSize = Environment.ProcessorCount * 2;
 
         if (maxSize < Environment.ProcessorCount)
-            logger1.LogWarning(
+            logger.LogWarning(
                 "Channel pool size {MaxSize} is less than processor count {ProcessorCount}",
                 maxSize, Environment.ProcessorCount);
 

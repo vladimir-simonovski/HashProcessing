@@ -1,6 +1,16 @@
 @HashProcessing.Api_HostAddress = http://localhost:5031
 
-GET {{HashProcessing.Api_HostAddress}}/weatherforecast/
+POST {{HashProcessing.Api_HostAddress}}/hashes
+Accept: application/json
+
+###
+
+POST {{HashProcessing.Api_HostAddress}}/hashes?count=10000
+Accept: application/json
+
+###
+
+GET {{HashProcessing.Api_HostAddress}}/hashes
 Accept: application/json
 
 ###

@@ -1,7 +1,6 @@
 using HashProcessing.Api.Core;
 using HashProcessing.Messaging;
 using Microsoft.EntityFrameworkCore;
-using RabbitMQ.Client;
 
 namespace HashProcessing.Api.Infrastructure;
 
@@ -15,21 +14,7 @@ public static class ServiceCollectionExtensions
         var connectionString = configuration.GetConnectionString("MariaDb")
                                ?? "Server=localhost;Database=api;User=root;Password=root;";
 
-        services.AddSingleton<IConnectionFactory>(_ => new ConnectionFactory
-        {
-            HostName = rabbitMqHost,
-            AutomaticRecoveryEnabled = true,
-            TopologyRecoveryEnabled = true,
-            NetworkRecoveryInterval = TimeSpan.FromSeconds(5)
-        });
-
-        services.AddSingleton(sp =>
-            sp.GetRequiredService<IConnectionFactory>().CreateConnectionAsync().GetAwaiter().GetResult());
-
-        services.AddSingleton<ConsumerChannelPool>();
-        services.AddSingleton<PublisherChannelPool>();
-
-        services.AddSingleton<RabbitMqPublisher>();
+        services.AddRabbitMq(rabbitMqHost);
 
         services.AddDbContext<ApiDbContext>(options =>
             options.UseMySql(connectionString, new MariaDbServerVersion(new Version(11, 0))));

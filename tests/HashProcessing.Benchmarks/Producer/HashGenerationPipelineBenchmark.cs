@@ -16,6 +16,11 @@ public class HashGenerationPipelineBenchmark
     private const ushort DegreeOfParallelism = 0; // ProcessorCount
     private const string QueueName = "benchmark-hash-processing";
 
+    private static readonly QueueArguments QueueArguments = new()
+    {
+        DeadLetterExchange = "dlx"
+    };
+
     private RabbitMqFixture _fixture = null!;
     private IHashProcessor _processor = null!;
 
@@ -28,7 +33,7 @@ public class HashGenerationPipelineBenchmark
         _fixture = new RabbitMqFixture();
         await _fixture.StartAsync();
 
-        var options = new StaticOptionsMonitor<HashProcessingOptions>(new HashProcessingOptions
+        var options = Options.Create(new HashProcessingOptions
         {
             DegreeOfParallelism = DegreeOfParallelism,
             BatchSize = BatchSize,
@@ -51,7 +56,7 @@ public class HashGenerationPipelineBenchmark
     [IterationSetup]
     public void IterationSetup()
     {
-        _fixture.PurgeQueueAsync(QueueName).GetAwaiter().GetResult();
+        _fixture.PurgeQueueAsync(QueueName, QueueArguments).GetAwaiter().GetResult();
     }
 
     [GlobalCleanup]
