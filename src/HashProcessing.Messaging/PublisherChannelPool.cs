@@ -4,22 +4,23 @@ using RabbitMQ.Client;
 
 namespace HashProcessing.Messaging;
 
-public class RabbitMqChannelPool : IAsyncDisposable
+public sealed class PublisherChannelPool : IAsyncDisposable
 {
+    private static readonly CreateChannelOptions ChannelOptions = new(
+        publisherConfirmationsEnabled: true,
+        publisherConfirmationTrackingEnabled: true);
+
     private readonly IConnection _connection;
-    private readonly CreateChannelOptions? _channelOptions;
     private readonly SemaphoreSlim _semaphore;
     private readonly ConcurrentQueue<IChannel> _available = new();
 
-    protected RabbitMqChannelPool(
+    public PublisherChannelPool(
         IConnection connection,
-        ILogger logger,
-        CreateChannelOptions? channelOptions = null,
+        ILogger<PublisherChannelPool> logger,
         int maxSize = 0)
     {
         _connection = connection ?? throw new ArgumentNullException(nameof(connection));
         ArgumentNullException.ThrowIfNull(logger);
-        _channelOptions = channelOptions;
 
         if (maxSize <= 0)
             maxSize = Environment.ProcessorCount * 2;
@@ -47,7 +48,7 @@ public class RabbitMqChannelPool : IAsyncDisposable
                 catch { /* dead channel */ }
             }
 
-            var newChannel = await _connection.CreateChannelAsync(_channelOptions, ct);
+            var newChannel = await _connection.CreateChannelAsync(ChannelOptions, ct);
             return new ChannelLease(newChannel, Return);
         }
         catch
@@ -74,17 +75,5 @@ public class RabbitMqChannelPool : IAsyncDisposable
         }
 
         _semaphore.Dispose();
-        GC.SuppressFinalize(this);
     }
 }
-
-public sealed class PublisherChannelPool(IConnection connection, ILogger<PublisherChannelPool> logger, int maxSize = 0)
-    : RabbitMqChannelPool(connection, logger, PublisherOptions, maxSize)
-{
-    private static readonly CreateChannelOptions PublisherOptions = new(
-        publisherConfirmationsEnabled: true,
-        publisherConfirmationTrackingEnabled: true);
-}
-
-public sealed class ConsumerChannelPool(IConnection connection, ILogger<ConsumerChannelPool> logger, int maxSize = 0)
-    : RabbitMqChannelPool(connection, logger, channelOptions: null, maxSize);

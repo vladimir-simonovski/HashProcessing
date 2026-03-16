@@ -4,6 +4,7 @@ using HashProcessing.Api.Infrastructure;
 using HashProcessing.Benchmarks.Infrastructure;
 using HashProcessing.Messaging;
 using HashProcessing.Worker.Infrastructure;
+using JetBrains.Annotations;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -30,7 +31,7 @@ public class HighBatchSizeBenchmark
     private CompletionSignal _completionSignal = null!;
 
     [Params(500, 1_000, 2_000, 5_000, 10_000)]
-    public ushort BatchSize { get; set; }
+    public ushort BatchSize { get; [UsedImplicitly] set; }
 
     [GlobalSetup]
     public async Task GlobalSetup()

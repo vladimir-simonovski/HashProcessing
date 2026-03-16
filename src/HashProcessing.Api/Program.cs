@@ -1,4 +1,3 @@
-using System.Threading.RateLimiting;
 using HashProcessing.Api.Application;
 using HashProcessing.Api.Infrastructure;
 using JetBrains.Annotations;

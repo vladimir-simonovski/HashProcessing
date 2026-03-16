@@ -17,12 +17,8 @@ public class RabbitMqConsumerShould(RabbitMqFixture fixture) : IClassFixture<Rab
     public async Task ConsumeAsync_WhenHandlerThrows_RoutesMessageToDeadLetterQueue()
     {
         // Arrange
-        var consumerPool = new ConsumerChannelPool(
-            fixture.Connection,
-            NullLoggerFactory.Instance.CreateLogger<ConsumerChannelPool>());
-
         var consumer = new FailingConsumer(
-            consumerPool,
+            fixture.Connection,
             NullLogger.Instance,
             QueueName,
             queueArguments: new QueueArguments { DeadLetterExchange = "dlx" });
@@ -74,12 +70,12 @@ public class RabbitMqConsumerShould(RabbitMqFixture fixture) : IClassFixture<Rab
     private record TestMessage(string Payload) : MessageBase;
 
     private sealed class FailingConsumer(
-        ConsumerChannelPool channelPool,
+        IConnection connection,
         ILogger logger,
         string queueName,
         ushort prefetchCount = 1,
         QueueArguments? queueArguments = null)
-        : RabbitMqConsumer<TestMessage>(channelPool, logger, queueName, prefetchCount, queueArguments)
+        : RabbitMqConsumer<TestMessage>(connection, logger, queueName, prefetchCount, queueArguments)
     {
         protected override Task HandleMessageAsync(TestMessage message, CancellationToken ct)
             => throw new InvalidOperationException("Simulated handler failure");

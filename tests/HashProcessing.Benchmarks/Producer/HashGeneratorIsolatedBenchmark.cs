@@ -2,6 +2,7 @@ using System.Threading.Channels;
 using BenchmarkDotNet.Attributes;
 using HashProcessing.Api.Core;
 using HashProcessing.Api.Infrastructure;
+using JetBrains.Annotations;
 using Microsoft.Extensions.Options;
 
 namespace HashProcessing.Benchmarks.Producer;
@@ -10,7 +11,7 @@ namespace HashProcessing.Benchmarks.Producer;
 public class HashGeneratorIsolatedBenchmark
 {
     [Params(100, 1_000, 10_000, 40_000, 100_000)]
-    public uint Count { get; set; }
+    public uint Count { get; [UsedImplicitly] set; }
 
     [Benchmark(Baseline = true)]
     public async Task<uint> Default_StreamSha1s()

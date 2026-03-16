@@ -1,6 +1,7 @@
 using HashProcessing.Worker.Application;
 using HashProcessing.Worker.Infrastructure;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -17,6 +18,14 @@ public class WorkerApplicationFactory(string dbConnectionString, string rabbitMq
     public async Task InitializeAsync()
     {
         var builder = Host.CreateApplicationBuilder();
+
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["RabbitMQ:HostName"] = "placeholder",
+            ["RabbitMQ:UserName"] = "placeholder",
+            ["RabbitMQ:Password"] = "placeholder",
+            ["ConnectionStrings:MariaDb"] = _dbConnectionString,
+        });
 
         builder.Services
             .AddApplication()

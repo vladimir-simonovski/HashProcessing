@@ -17,6 +17,11 @@ public class ApiWebApplicationFactory(string dbConnectionString, string rabbitMq
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
+        builder.UseSetting("RabbitMQ:HostName", "placeholder");
+        builder.UseSetting("RabbitMQ:UserName", "placeholder");
+        builder.UseSetting("RabbitMQ:Password", "placeholder");
+        builder.UseSetting("ConnectionStrings:MariaDb", _dbConnectionString);
+
         builder.ConfigureServices(services =>
         {
             services.RemoveAll<DbContextOptions<ApiDbContext>>();

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
 
 namespace HashProcessing.Messaging;
@@ -8,16 +9,19 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddRabbitMq(
         this IServiceCollection services,
         string hostName,
-        string? userName = null,
-        string? password = null)
+        string userName,
+        string password,
+        int publisherChannelPoolSize = 0)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(hostName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(userName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(password);
 
         services.AddSingleton<IConnectionFactory>(_ => new ConnectionFactory
         {
             HostName = hostName,
-            UserName = userName ?? ConnectionFactory.DefaultUser,
-            Password = password ?? ConnectionFactory.DefaultPass,
+            UserName = userName,
+            Password = password,
             AutomaticRecoveryEnabled = true,
             TopologyRecoveryEnabled = true,
             NetworkRecoveryInterval = TimeSpan.FromSeconds(5)
@@ -26,8 +30,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(sp =>
             sp.GetRequiredService<IConnectionFactory>().CreateConnectionAsync().GetAwaiter().GetResult());
 
-        services.AddSingleton<ConsumerChannelPool>();
-        services.AddSingleton<PublisherChannelPool>();
+        services.AddSingleton<PublisherChannelPool>(sp => new PublisherChannelPool(
+            sp.GetRequiredService<IConnection>(),
+            sp.GetRequiredService<ILogger<PublisherChannelPool>>(),
+            publisherChannelPoolSize));
 
         services.AddSingleton<RabbitMqPublisher>();
 

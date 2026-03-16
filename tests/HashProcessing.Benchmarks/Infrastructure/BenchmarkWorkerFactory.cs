@@ -2,6 +2,7 @@ using HashProcessing.Messaging;
 using HashProcessing.Worker.Application;
 using HashProcessing.Worker.Infrastructure;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -27,6 +28,11 @@ public sealed class BenchmarkWorkerFactory(
         var builder = Host.CreateApplicationBuilder();
         builder.Logging.ClearProviders();
 
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:MariaDb"] = _mariaDb.WorkerConnectionString
+        });
+
         builder.Services
             .AddApplication()
             .AddInfrastructure(builder.Configuration);
@@ -45,7 +51,7 @@ public sealed class BenchmarkWorkerFactory(
             builder.Services.RemoveAll<RabbitMqHashConsumer>();
             builder.Services.AddSingleton(sp =>
                 new RabbitMqHashConsumer(
-                    sp.GetRequiredService<ConsumerChannelPool>(),
+                    sp.GetRequiredService<IConnection>(),
                     sp.GetRequiredService<IServiceScopeFactory>(),
                     sp.GetRequiredService<ILogger<RabbitMqHashConsumer>>(),
                     "hash-processing",

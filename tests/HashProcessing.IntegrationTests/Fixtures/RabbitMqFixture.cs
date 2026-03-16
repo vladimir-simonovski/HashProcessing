@@ -12,12 +12,14 @@ public class RabbitMqFixture : IAsyncLifetime
         .Build();
 
     public IConnection Connection { get; private set; } = null!;
+    public string ConnectionString { get; private set; } = null!;
 
     public async Task InitializeAsync()
     {
         await _rabbitMq.StartAsync();
 
-        var factory = new ConnectionFactory { Uri = new Uri(_rabbitMq.GetConnectionString()) };
+        ConnectionString = _rabbitMq.GetConnectionString();
+        var factory = new ConnectionFactory { Uri = new Uri(ConnectionString) };
         Connection = await factory.CreateConnectionAsync();
 
         await using var channel = await Connection.CreateChannelAsync();

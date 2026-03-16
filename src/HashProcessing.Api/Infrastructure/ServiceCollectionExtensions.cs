@@ -10,9 +10,12 @@ public static class ServiceCollectionExtensions
     {
         services.Configure<HashProcessingOptions>(configuration.GetSection("HashProcessing"));
 
-        var rabbitMqHost = configuration["RabbitMQ:HostName"] ?? "localhost";
-        var rabbitMqUser = configuration["RabbitMQ:UserName"];
-        var rabbitMqPass = configuration["RabbitMQ:Password"];
+        var rabbitMqHost = configuration["RabbitMQ:HostName"]
+                               ?? throw new InvalidOperationException("Configuration 'RabbitMQ:HostName' is not configured.");
+        var rabbitMqUser = configuration["RabbitMQ:UserName"]
+                               ?? throw new InvalidOperationException("Configuration 'RabbitMQ:UserName' is not configured.");
+        var rabbitMqPass = configuration["RabbitMQ:Password"]
+                               ?? throw new InvalidOperationException("Configuration 'RabbitMQ:Password' is not configured.");
         var connectionString = configuration.GetConnectionString("MariaDb")
                                ?? throw new InvalidOperationException("Connection string 'MariaDb' is not configured.");
 

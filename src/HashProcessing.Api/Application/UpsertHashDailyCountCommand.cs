@@ -8,8 +8,6 @@ public class UpsertHashDailyCountCommandHandler(IHashDailyCountRepository reposi
 {
     private readonly IHashDailyCountRepository _repository = repository ?? throw new ArgumentNullException(nameof(repository));
 
-    public async Task HandleAsync(UpsertHashDailyCountCommand command, CancellationToken ct = default)
-    {
-        await _repository.UpsertAsync(command.Date, command.Count, ct);
-    }
+    public Task HandleAsync(UpsertHashDailyCountCommand command, CancellationToken ct = default) 
+        => _repository.UpsertAsync(command.Date, command.Count, ct);
 }

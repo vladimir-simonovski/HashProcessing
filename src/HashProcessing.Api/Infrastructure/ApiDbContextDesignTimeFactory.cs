@@ -1,8 +1,10 @@
+using JetBrains.Annotations;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 
 namespace HashProcessing.Api.Infrastructure;
 
+[UsedImplicitly]
 public class ApiDbContextDesignTimeFactory : IDesignTimeDbContextFactory<ApiDbContext>
 {
     public ApiDbContext CreateDbContext(string[] args)

@@ -6,7 +6,7 @@ using RabbitMQ.Client;
 
 namespace HashProcessing.Api.UnitTests.Infrastructure;
 
-public class RabbitMqChannelPoolShould
+public class PublisherChannelPoolShould
 {
     [Fact]
     public async Task AcquireAsync_ReusesReturnedChannel()
@@ -19,9 +19,9 @@ public class RabbitMqChannelPoolShould
         connection.CreateChannelAsync(Arg.Any<CreateChannelOptions?>(), Arg.Any<CancellationToken>())
             .Returns(channel);
 
-        var pool = new ConsumerChannelPool(
+        var pool = new PublisherChannelPool(
             connection,
-            NullLoggerFactory.Instance.CreateLogger<ConsumerChannelPool>());
+            NullLoggerFactory.Instance.CreateLogger<PublisherChannelPool>());
 
         // Act — acquire and release
         var lease1 = await pool.AcquireAsync();
@@ -53,9 +53,9 @@ public class RabbitMqChannelPoolShould
         connection.CreateChannelAsync(Arg.Any<CreateChannelOptions?>(), Arg.Any<CancellationToken>())
             .Returns(deadChannel, freshChannel);
 
-        var pool = new ConsumerChannelPool(
+        var pool = new PublisherChannelPool(
             connection,
-            NullLoggerFactory.Instance.CreateLogger<ConsumerChannelPool>());
+            NullLoggerFactory.Instance.CreateLogger<PublisherChannelPool>());
 
         // Act — acquire first, then mark dead, release, reacquire
         var lease1 = await pool.AcquireAsync();
@@ -74,10 +74,10 @@ public class RabbitMqChannelPoolShould
     {
         // Arrange
         var connection = Substitute.For<IConnection>();
-        var logger = Substitute.For<ILogger<ConsumerChannelPool>>();
+        var logger = Substitute.For<ILogger<PublisherChannelPool>>();
 
         // Act
-        _ = new ConsumerChannelPool(connection, logger, maxSize: 1);
+        _ = new PublisherChannelPool(connection, logger, maxSize: 1);
 
         // Assert
         logger.Received().Log(
@@ -136,60 +136,6 @@ public class RabbitMqChannelPoolShould
         await Task.WhenAll(tasks);
 
         // Assert — at most poolSize channels created, all reused
-        await connection.Received(poolSize)
-            .CreateChannelAsync(Arg.Any<CreateChannelOptions?>(), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task AcquireAsync_ConcurrentConsumers_ReuseChannelsWithoutExcessiveCreation()
-    {
-        // Arrange — pool of 4, 4 long-lived consumers each holding a channel
-        const int poolSize = 4;
-        const int consumerCount = 4;
-
-        var channels = Enumerable.Range(0, poolSize)
-            .Select(_ =>
-            {
-                var ch = Substitute.For<IChannel>();
-                ch.IsOpen.Returns(true);
-                return ch;
-            })
-            .ToArray();
-
-        var callIndex = 0;
-        var connection = Substitute.For<IConnection>();
-        connection.CreateChannelAsync(Arg.Any<CreateChannelOptions?>(), Arg.Any<CancellationToken>())
-            .Returns(_ =>
-            {
-                var idx = Interlocked.Increment(ref callIndex) - 1;
-                return idx < channels.Length
-                    ? channels[idx]
-                    : throw new InvalidOperationException(
-                        $"Created {idx + 1} channels but pool should cap at {poolSize}");
-            });
-
-        var pool = new ConsumerChannelPool(
-            connection,
-            NullLoggerFactory.Instance.CreateLogger<ConsumerChannelPool>(),
-            maxSize: poolSize);
-
-        // Act — all consumers acquire simultaneously, hold, then release
-        var leases = await Task.WhenAll(
-            Enumerable.Range(0, consumerCount)
-                .Select(_ => pool.AcquireAsync()));
-
-        foreach (var lease in leases)
-            await lease.DisposeAsync();
-
-        // Re-acquire — should reuse, no new channels
-        var reacquired = await Task.WhenAll(
-            Enumerable.Range(0, consumerCount)
-                .Select(_ => pool.AcquireAsync()));
-
-        foreach (var lease in reacquired)
-            await lease.DisposeAsync();
-
-        // Assert — exactly poolSize channels created total (reused on second round)
         await connection.Received(poolSize)
             .CreateChannelAsync(Arg.Any<CreateChannelOptions?>(), Arg.Any<CancellationToken>());
     }

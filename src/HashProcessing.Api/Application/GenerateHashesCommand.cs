@@ -2,22 +2,17 @@ using HashProcessing.Api.Core;
 
 namespace HashProcessing.Api.Application;
 
-public class GenerateHashesCommand
+public class GenerateHashesCommand(uint? count = null)
 {
-    public const uint MaxCount = 1_000_000;
+    private const uint MaxCount = 1_000_000;
     
-    public uint Count { get; }
-    
-    public GenerateHashesCommand(uint? count = null)
+    public uint Count { get; } = count switch
     {
-        if (count == 0)
-            throw new ArgumentException("Count must be greater than zero.", nameof(count));
-        
-        if (count > MaxCount)
-            throw new ArgumentOutOfRangeException(nameof(count), count, $"Count must not exceed {MaxCount:N0}.");
-        
-        Count = count ?? 40_000;
-    }
+        0 => throw new ArgumentException("Count must be greater than zero.", nameof(count)),
+        > MaxCount => throw new ArgumentOutOfRangeException(nameof(count), count,
+            $"Count must not exceed {MaxCount:N0}."),
+        _ => count ?? 40_000
+    };
 }
 
 public class GenerateHashesCommandHandler(

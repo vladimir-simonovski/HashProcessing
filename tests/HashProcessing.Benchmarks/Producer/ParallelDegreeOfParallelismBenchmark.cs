@@ -3,6 +3,7 @@ using HashProcessing.Api.Core;
 using HashProcessing.Api.Infrastructure;
 using HashProcessing.Benchmarks.Infrastructure;
 using HashProcessing.Messaging;
+using JetBrains.Annotations;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -24,7 +25,7 @@ public class ParallelDegreeOfParallelismBenchmark
     private RabbitMqFixture _fixture = null!;
 
     [Params(1, 2, 4, 8, 0)]
-    public ushort DegreeOfParallelism { get; set; }
+    public ushort DegreeOfParallelism { get; [UsedImplicitly] set; }
 
     [GlobalSetup]
     public async Task GlobalSetup()

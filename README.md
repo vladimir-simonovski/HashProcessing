@@ -15,7 +15,7 @@ HashProcessing is a two-service system designed for high-throughput hash generat
 
 - Streaming hash generation via `System.Threading.Channels` for backpressure-aware, non-blocking pipelines
 - Configurable parallel hash generation (`Parallel.ForAsync`) and parallel batch publishing
-- Batched RabbitMQ publishing with persistent delivery mode
+- Batched RabbitMQ publishing with persistent delivery mode and Polly resilience (retry with exponential backoff + circuit breaker) for transient broker/network failures
 - 4-thread parallel RabbitMQ consumption with manual acknowledgement
 - Anti-corruption layer: contract messages (`HashBatchMessage`) mapped to domain entities (`HashEntity`) before persistence
 - Event-driven daily count aggregation: Worker publishes `HashDailyCountMessage` → API consumes and upserts counts
@@ -32,7 +32,6 @@ HashProcessing is a two-service system designed for high-throughput hash generat
 - HSTS enforcement in production
 - Least-privilege database users per service (`api_user`, `worker_user`)
 - Dedicated RabbitMQ user (`hashprocessing`) with scoped permissions
-- Polly circuit breaker on `RabbitMqPublisher` (breaks after 50% failure rate over 30 s)
 - EF Core transient fault retry strategy (`EnableRetryOnFailure`)
 - Docker Compose healthcheck probes for all services
 
@@ -252,7 +251,6 @@ Performance benchmarks use [BenchmarkDotNet](https://benchmarkdotnet.org/) with 
 | `HashGenerationPipelineBenchmark` | End-to-end generate → batch → publish through real `RabbitMqBatchedOffloadToWorkerProcessor` against a Testcontainers RabbitMQ instance (1K–100K hashes) | Yes |
 | `ParallelDegreeOfParallelismBenchmark` | Optimal `ParallelHashGenerator` degree of parallelism (1, 2, 4, 8, ProcessorCount) at 40K hashes with real RabbitMQ | Yes |
 | `BatchSizeBenchmark` | Optimal RabbitMQ publish batch size (10–40K) at 1M hashes with real RabbitMQ | Yes |
-| `PrefetchCountBenchmark` | Optimal RabbitMQ consumer prefetch count (1–250) with 4 parallel consumers processing 20K batches | Yes |
 | `HighBatchSizeBenchmark` | Full end-to-end roundtrip: HTTP POST 200K hashes with varying batch sizes (500–10K), measuring total pipeline time with real RabbitMQ + MariaDB + Worker | Yes |
 
 ### Running benchmarks
@@ -329,7 +327,7 @@ The API and Worker each use their own MariaDB logical database (`api` and `worke
 
 ### RabbitMQ channel pool
 
-A semaphore-gated `RabbitMqChannelPool` (sized to `Environment.ProcessorCount × 2`) manages channel lifecycle. Channels are returned to a `ConcurrentQueue` on disposal and health-checked on acquire. The `PublisherChannelPool` subclass enables publisher confirmations and tracking, ensuring the broker acknowledges every published message.
+A semaphore-gated `PublisherChannelPool` (sized to `Environment.ProcessorCount × 2`) manages channel lifecycle. Channels are returned to a `ConcurrentQueue` on disposal and health-checked on acquire. Publisher confirmations and tracking are enabled, ensuring the broker acknowledges every published message.
 
 ### Messaging resilience
 

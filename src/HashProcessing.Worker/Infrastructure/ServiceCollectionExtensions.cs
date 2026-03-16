@@ -2,6 +2,7 @@ using HashProcessing.Messaging;
 using HashProcessing.Worker.Application;
 using HashProcessing.Worker.Core;
 using Microsoft.EntityFrameworkCore;
+using RabbitMQ.Client;
 
 namespace HashProcessing.Worker.Infrastructure;
 
@@ -14,9 +15,12 @@ public static class ServiceCollectionExtensions
         const string consumeQueueName = "hash-processing";
         const string deadLetterExchange = "dlx";
         var queueArguments = new QueueArguments { DeadLetterExchange = deadLetterExchange };
-        var rabbitMqHost = configuration["RabbitMQ:HostName"] ?? "localhost";
-        var rabbitMqUser = configuration["RabbitMQ:UserName"];
-        var rabbitMqPass = configuration["RabbitMQ:Password"];
+        var rabbitMqHost = configuration["RabbitMQ:HostName"]
+                               ?? throw new InvalidOperationException("Configuration 'RabbitMQ:HostName' is not configured.");
+        var rabbitMqUser = configuration["RabbitMQ:UserName"]
+                               ?? throw new InvalidOperationException("Configuration 'RabbitMQ:UserName' is not configured.");
+        var rabbitMqPass = configuration["RabbitMQ:Password"]
+                               ?? throw new InvalidOperationException("Configuration 'RabbitMQ:Password' is not configured.");
         var connectionString = configuration.GetConnectionString("MariaDb")
                                ?? throw new InvalidOperationException("Connection string 'MariaDb' is not configured.");
 
@@ -33,7 +37,7 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton(sp =>
             new RabbitMqHashConsumer(
-                sp.GetRequiredService<ConsumerChannelPool>(),
+                sp.GetRequiredService<IConnection>(),
                 sp.GetRequiredService<IServiceScopeFactory>(),
                 sp.GetRequiredService<ILogger<RabbitMqHashConsumer>>(),
                 consumeQueueName,

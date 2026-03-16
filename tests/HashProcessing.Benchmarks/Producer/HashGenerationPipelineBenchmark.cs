@@ -3,6 +3,7 @@ using HashProcessing.Api.Core;
 using HashProcessing.Api.Infrastructure;
 using HashProcessing.Benchmarks.Infrastructure;
 using HashProcessing.Messaging;
+using JetBrains.Annotations;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -25,7 +26,7 @@ public class HashGenerationPipelineBenchmark
     private IHashProcessor _processor = null!;
 
     [Params(1_000, 10_000, 40_000, 100_000)]
-    public uint Count { get; set; }
+    public uint Count { get; [UsedImplicitly] set; }
 
     [GlobalSetup]
     public async Task GlobalSetup()

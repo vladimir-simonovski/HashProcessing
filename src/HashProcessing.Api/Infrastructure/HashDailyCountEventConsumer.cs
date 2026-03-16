@@ -1,16 +1,17 @@
 using HashProcessing.Api.Application;
 using HashProcessing.Messaging;
 using Microsoft.Extensions.Options;
+using RabbitMQ.Client;
 
 namespace HashProcessing.Api.Infrastructure;
 
 public class HashDailyCountEventConsumer(
-    ConsumerChannelPool channelPool,
+    IConnection connection,
     IServiceScopeFactory scopeFactory,
     ILogger<HashDailyCountEventConsumer> logger,
     IOptions<HashProcessingOptions> options)
     : RabbitMqConsumer<HashDailyCountMessage>(
-        channelPool,
+        connection,
         logger,
         options.Value.ConsumeQueueName,
         queueArguments: new QueueArguments { DeadLetterExchange = options.Value.DeadLetterExchange })

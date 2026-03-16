@@ -2,9 +2,7 @@ using HashProcessing.Worker;
 using HashProcessing.Worker.Application;
 using HashProcessing.Worker.Infrastructure;
 using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 
 var builder = WebApplication.CreateBuilder(args);
 

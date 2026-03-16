@@ -7,7 +7,7 @@ namespace HashProcessing.Messaging;
 
 public abstract class RabbitMqConsumer<TMessage> where TMessage : MessageBase
 {
-    private readonly ConsumerChannelPool _channelPool;
+    private readonly IConnection _connection;
 
     private readonly ILogger _logger;
     private readonly string _queueName;
@@ -15,13 +15,13 @@ public abstract class RabbitMqConsumer<TMessage> where TMessage : MessageBase
     private readonly QueueArguments? _queueArguments;
 
     protected RabbitMqConsumer(
-        ConsumerChannelPool channelPool,
+        IConnection connection,
         ILogger logger,
         string queueName,
         ushort prefetchCount = 1,
         QueueArguments? queueArguments = null)
     {
-        _channelPool = channelPool ?? throw new ArgumentNullException(nameof(channelPool));
+        _connection = connection ?? throw new ArgumentNullException(nameof(connection));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
         ArgumentException.ThrowIfNullOrWhiteSpace(queueName);
@@ -37,8 +37,7 @@ public abstract class RabbitMqConsumer<TMessage> where TMessage : MessageBase
 
     public async Task ConsumeAsync(int consumerId, CancellationToken ct)
     {
-        await using var lease = await _channelPool.AcquireAsync(ct);
-        var channel = lease.Channel;
+        await using var channel = await _connection.CreateChannelAsync(cancellationToken: ct);
 
         await channel.QueueDeclareAsync(
             _queueName,

@@ -2,6 +2,7 @@ namespace HashProcessing.Messaging;
 
 public abstract record MessageBase
 {
+    // ReSharper disable once UnusedMember.Global
     public string Id { get; } = Guid.NewGuid().ToString();
 }
 

@@ -7,12 +7,10 @@ public class HashDailyCountRepository(ApiDbContext db) : IHashDailyCountReposito
 {
     private readonly ApiDbContext _db = db ?? throw new ArgumentNullException(nameof(db));
 
-    public async Task UpsertAsync(DateOnly date, long count, CancellationToken ct = default)
-    {
-        await _db.Database.ExecuteSqlInterpolatedAsync(
+    public Task UpsertAsync(DateOnly date, long count, CancellationToken ct = default) =>
+        _db.Database.ExecuteSqlInterpolatedAsync(
             $"INSERT INTO hash_daily_counts (date, count) VALUES ({date}, {count}) ON DUPLICATE KEY UPDATE count = GREATEST(count, {count})",
             ct);
-    }
 
     public async Task<IReadOnlyCollection<HashDailyCount>> GetAllAsync(CancellationToken ct = default)
     {
