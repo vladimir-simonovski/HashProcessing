@@ -236,9 +236,6 @@ curl https://localhost:8081/hashes
 dotnet test
 ```
 
-- **Unit tests** — xUnit + NSubstitute. Covers the `RabbitMqBatchedOffloadToWorkerProcessor` batch-and-publish pipeline.
-- **Integration tests** — xUnit + Testcontainers. End-to-end flow: POST /hashes → Worker processing → GET /hashes verifies persisted counts. Requires Docker.
-
 ## Benchmarks
 
 Performance benchmarks use [BenchmarkDotNet](https://benchmarkdotnet.org/) with Testcontainers for real RabbitMQ infrastructure. Docker must be running for pipeline benchmarks.
