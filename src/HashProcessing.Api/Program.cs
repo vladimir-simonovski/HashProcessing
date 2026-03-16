@@ -1,6 +1,8 @@
+using System.Threading.RateLimiting;
 using HashProcessing.Api.Application;
 using HashProcessing.Api.Infrastructure;
 using JetBrains.Annotations;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -16,6 +18,23 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
+builder.Services.AddProblemDetails();
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddFixedWindowLimiter("hash-generation", limiter =>
+    {
+        limiter.PermitLimit = 5;
+        limiter.Window = TimeSpan.FromMinutes(1);
+        limiter.QueueLimit = 0;
+    });
+});
+
+builder.Services
+    .AddHealthChecks()
+    .AddDbContextCheck<ApiDbContext>("mariadb");
+
 builder.Services
     .AddApplication()
     .AddInfrastructure(builder.Configuration);
@@ -28,13 +47,22 @@ using (var scope = app.Services.CreateScope())
     await db.Database.MigrateAsync();
 }
 
+app.UseExceptionHandler();
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+else
+{
+    app.UseHsts();
+}
 
 app.UseHttpsRedirection();
+app.UseRateLimiter();
+
+app.MapHealthChecks("/health");
 
 app.MapPost("/hashes", async (uint? count, HttpContext context) =>
     {
@@ -53,11 +81,13 @@ app.MapPost("/hashes", async (uint? count, HttpContext context) =>
     .WithTags("Hashes")
     .Produces(StatusCodes.Status202Accepted)
     .Produces(StatusCodes.Status400BadRequest)
+    .Produces(StatusCodes.Status429TooManyRequests)
     .WithOpenApi(operation =>
     {
         operation.Parameters[0].Description = "Number of SHA-1 hashes to generate. Must be greater than zero. Defaults to 40,000.";
         return operation;
-    });
+    })
+    .RequireRateLimiting("hash-generation");
 
 app.MapGet("/hashes", async (HttpContext context) =>
     {

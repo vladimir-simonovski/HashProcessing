@@ -4,6 +4,11 @@
       "name": "guest",
       "password": "guest",
       "tags": ["administrator"]
+    },
+    {
+      "name": "hashprocessing",
+      "password": "hashprocessing",
+      "tags": []
     }
   ],
   "vhosts": [
@@ -18,6 +23,13 @@
       "configure": ".*",
       "write": ".*",
       "read": ".*"
+    },
+    {
+      "user": "hashprocessing",
+      "vhost": "/",
+      "configure": "^(hash-processing|hash-daily-counts|hash-processing-dlq|hash-daily-counts-dlq)$",
+      "write": "^(amq\\.default|dlx|hash-processing|hash-daily-counts)$",
+      "read": "^(hash-processing|hash-daily-counts|hash-processing-dlq|hash-daily-counts-dlq)$"
     }
   ],
   "queues": [

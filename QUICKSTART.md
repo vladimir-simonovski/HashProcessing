@@ -3,13 +3,13 @@
 ## Prerequisites
 
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or compatible Docker Engine with Compose)
+- [PowerShell 7.4+](https://learn.microsoft.com/en-us/powershell/scripting/install/installing-powershell)
 
 ## Start the stack
 
-```bash
+```powershell
 # Generate and trust a local HTTPS dev certificate (one-time)
-chmod +x scripts/setup-dev-https.sh
-./scripts/setup-dev-https.sh
+./scripts/setup-dev-https.ps1
 
 # Start API, Worker, RabbitMQ, and MariaDB
 docker compose up --build

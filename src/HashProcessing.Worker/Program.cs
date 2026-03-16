@@ -1,21 +1,30 @@
 using HashProcessing.Worker;
 using HashProcessing.Worker.Application;
 using HashProcessing.Worker.Infrastructure;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
-var builder = Host.CreateApplicationBuilder(args);
+var builder = WebApplication.CreateBuilder(args);
 
 builder.Services
     .AddApplication()
     .AddInfrastructure(builder.Configuration);
 builder.Services.AddHostedService<Worker>();
 
-var host = builder.Build();
+builder.Services
+    .AddHealthChecks()
+    .AddDbContextCheck<HashDbContext>("mariadb");
 
-using (var scope = host.Services.CreateScope())
+var app = builder.Build();
+
+using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<HashDbContext>();
     await db.Database.MigrateAsync();
 }
 
-host.Run();
+app.MapHealthChecks("/health");
+
+app.Run();

@@ -15,13 +15,19 @@ public static class ServiceCollectionExtensions
         const string deadLetterExchange = "dlx";
         var queueArguments = new QueueArguments { DeadLetterExchange = deadLetterExchange };
         var rabbitMqHost = configuration["RabbitMQ:HostName"] ?? "localhost";
+        var rabbitMqUser = configuration["RabbitMQ:UserName"];
+        var rabbitMqPass = configuration["RabbitMQ:Password"];
         var connectionString = configuration.GetConnectionString("MariaDb")
-                               ?? "Server=localhost;Database=worker;User=root;Password=root;";
+                               ?? throw new InvalidOperationException("Connection string 'MariaDb' is not configured.");
 
-        services.AddRabbitMq(rabbitMqHost);
+        services.AddRabbitMq(rabbitMqHost, rabbitMqUser, rabbitMqPass);
 
         services.AddDbContext<HashDbContext>(options =>
-            options.UseMySql(connectionString, new MariaDbServerVersion(new Version(11, 0))));
+            options.UseMySql(connectionString, new MariaDbServerVersion(new Version(11, 0)),
+                mysqlOptions => mysqlOptions.EnableRetryOnFailure(
+                    maxRetryCount: 3,
+                    maxRetryDelay: TimeSpan.FromSeconds(5),
+                    errorNumbersToAdd: null)));
 
         services.AddScoped<IHashRepository, HashRepository>();
 

@@ -25,6 +25,16 @@ HashProcessing is a two-service system designed for high-throughput hash generat
 - Multi-stage Docker builds for both services
 - HTTPS-enabled local development with scripted certificate bootstrap
 - OpenAPI/Swagger UI in development mode
+- Rate limiting on `POST /hashes` (fixed window, 5 requests/minute) with `429 Too Many Requests` response
+- Input cap: maximum 1,000,000 hashes per request
+- Global error handling with RFC 7807 ProblemDetails responses
+- Health check endpoint (`GET /health`) on both API and Worker with MariaDB connectivity probe
+- HSTS enforcement in production
+- Least-privilege database users per service (`api_user`, `worker_user`)
+- Dedicated RabbitMQ user (`hashprocessing`) with scoped permissions
+- Polly circuit breaker on `RabbitMqPublisher` (breaks after 50% failure rate over 30 s)
+- EF Core transient fault retry strategy (`EnableRetryOnFailure`)
+- Docker Compose healthcheck probes for all services
 
 ## Architecture
 
@@ -156,17 +166,17 @@ RabbitMQ topology is defined declaratively in [rabbitmq/definitions.json](rabbit
 
 - [.NET SDK 8.x](https://dotnet.microsoft.com/download/dotnet/8.0)
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or compatible Docker Engine with Compose)
+- [PowerShell 7.4+](https://learn.microsoft.com/en-us/powershell/scripting/install/installing-powershell)
 
 ### Run with Docker (recommended)
 
 1. Generate and trust a local HTTPS development certificate:
 
-   ```bash
-   chmod +x scripts/setup-dev-https.sh
-   ./scripts/setup-dev-https.sh
+   ```powershell
+   ./scripts/setup-dev-https.ps1
    ```
 
-   The script generates an ASP.NET Core dev certificate, exports it as a PFX for Docker, and trusts it on your machine (may prompt for your password on macOS).
+   The script generates an ASP.NET Core dev certificate, exports it as a PFX for Docker, and trusts it on your machine. Works on Windows, macOS, and Linux.
 
 2. Start both services:
 
@@ -197,12 +207,16 @@ The API will be available at `http://localhost:5031` (and `https://localhost:709
 > [!IMPORTANT]
 > A running RabbitMQ instance and MariaDB instance on `localhost` are required for hash processing to work outside Docker.
 
+> [!NOTE]
+> The first `docker compose up` run executes `mariadb/init.sql` to create databases and least-privilege users. If you need to re-initialize the database (e.g., after changing credentials), run `docker compose down -v` first to remove the MariaDB volume.
+
 ## API
 
 | Method | Route | Description |
 |---|---|---|
-| `POST` | `/hashes?count={n}` | Generate SHA-1 hashes (default 40,000), batch and publish to RabbitMQ. Returns `202 Accepted`. |
+| `POST` | `/hashes?count={n}` | Generate SHA-1 hashes (default 40,000, max 1,000,000), batch and publish to RabbitMQ. Returns `202 Accepted`. Rate-limited to 5 req/min. |
 | `GET` | `/hashes` | Return aggregated daily hash counts ordered by date descending. |
+| `GET` | `/health` | Health check endpoint. Returns `200 OK` when the API and its MariaDB connection are healthy. |
 
 ### Examples
 
@@ -271,11 +285,13 @@ Results are written to `tests/HashProcessing.Benchmarks/BenchmarkDotNet.Artifact
 HashProcessing/
 ├── compose.yaml                         # Docker Compose (API + Worker + RabbitMQ + MariaDB)
 ├── global.json                          # .NET SDK version pinning
+├── mariadb/
+│   └── init.sql                         # Creates databases + least-privilege users (api_user, worker_user)
 ├── rabbitmq/
 │   ├── definitions.json                 # RabbitMQ topology (queues, exchanges, bindings)
 │   └── rabbitmq.conf                    # RabbitMQ config — loads definitions on startup
 ├── scripts/
-│   └── setup-dev-https.sh               # HTTPS certificate generation + trust
+│   └── setup-dev-https.ps1              # HTTPS certificate bootstrap (PowerShell 7+, cross-platform)
 ├── src/
 │   ├── HashProcessing.Api/
 │   │   ├── Program.cs                   # Host builder, endpoints, middleware
@@ -285,9 +301,9 @@ HashProcessing/
 │   │   └── Infrastructure/              # RabbitMQ processor, hash generators, EF Core, consumer
 │   ├── HashProcessing.Messaging/        # Shared: RabbitMqPublisher, RabbitMqConsumer<T>, message contracts
 │   └── HashProcessing.Worker/
-│       ├── Program.cs                   # Host builder, auto-migration
+│       ├── Program.cs                   # Host builder, health check endpoint, auto-migration
 │       ├── Worker.cs                    # BackgroundService — 4 parallel consumers
-│       ├── Dockerfile                   # Multi-stage build → Alpine .NET Runtime 8.0
+│       ├── Dockerfile                   # Multi-stage build → Alpine ASP.NET 8.0
 │       ├── Application/                 # CQRS command + handler (ProcessReceivedHashes)
 │       ├── Core/                        # Domain: HashEntity, IHashRepository
 │       └── Infrastructure/              # EF Core DbContext, RabbitMQ consumer, publisher
@@ -320,6 +336,8 @@ A semaphore-gated `RabbitMqChannelPool` (sized to `Environment.ProcessorCount ×
 Multiple layers protect against message loss:
 
 - **Polly retry pipeline** — 3 attempts with exponential backoff (200 ms base) for transient broker/network exceptions (`AlreadyClosedException`, `BrokerUnreachableException`, `IOException`, `SocketException`)
+- **Polly circuit breaker** — breaks the `RabbitMqPublisher` circuit after a 50% failure rate (minimum 5 calls in a 30 s window) and holds open for 15 s before half-opening. Prevents cascading failures when RabbitMQ is degraded.
+- **EF Core transient retry** — `EnableRetryOnFailure` (3 attempts, 5 s max delay) on both API and Worker database contexts handles transient MariaDB connectivity issues without manual Polly wrappers
 - **Persistent delivery mode** — all published messages are marked `Persistent = true`, surviving broker restarts
 - **Dead-letter queues** — both `hash-processing` and `hash-daily-counts` queues route nacked messages to per-queue DLQs via a `dlx` direct exchange, declared in `rabbitmq/definitions.json`
 - **Manual acknowledgement** — `autoAck: false` with explicit `BasicAckAsync` on success and `BasicNackAsync` (requeue: false) on failure, routing poison messages to the DLQ
@@ -336,6 +354,7 @@ Multiple layers protect against message loss:
 | Database | MariaDB 11 (via Pomelo.EntityFrameworkCore.MySql 8.x) |
 | Messaging | RabbitMQ (`RabbitMQ.Client` 7.x) |
 | Concurrency | `System.Threading.Channels`, `Parallel.ForAsync` |
+| Resilience | Polly (retry + circuit breaker) |
 | API docs | OpenAPI / Swashbuckle |
 | Containers | Docker multi-stage Alpine builds, Docker Compose |
 | Testing | xUnit, NSubstitute, coverlet |

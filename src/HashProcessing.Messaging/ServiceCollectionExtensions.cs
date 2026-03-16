@@ -5,13 +5,19 @@ namespace HashProcessing.Messaging;
 
 public static class ServiceCollectionExtensions
 {
-    public static IServiceCollection AddRabbitMq(this IServiceCollection services, string hostName)
+    public static IServiceCollection AddRabbitMq(
+        this IServiceCollection services,
+        string hostName,
+        string? userName = null,
+        string? password = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(hostName);
 
         services.AddSingleton<IConnectionFactory>(_ => new ConnectionFactory
         {
             HostName = hostName,
+            UserName = userName ?? ConnectionFactory.DefaultUser,
+            Password = password ?? ConnectionFactory.DefaultPass,
             AutomaticRecoveryEnabled = true,
             TopologyRecoveryEnabled = true,
             NetworkRecoveryInterval = TimeSpan.FromSeconds(5)

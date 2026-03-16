@@ -3,6 +3,7 @@ using System.Net.Sockets;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Polly;
+using Polly.CircuitBreaker;
 using Polly.Retry;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Exceptions;
@@ -17,22 +18,49 @@ public class RabbitMqPublisher(
     private readonly ILogger<RabbitMqPublisher> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     private readonly ConcurrentDictionary<string, byte> _declaredQueues = new();
 
-    private readonly ResiliencePipeline _retryPipeline = new ResiliencePipelineBuilder()
+    private static readonly PredicateBuilder<object> TransientPredicate = new PredicateBuilder<object>()
+        .Handle<AlreadyClosedException>()
+        .Handle<BrokerUnreachableException>()
+        .Handle<IOException>()
+        .Handle<SocketException>();
+
+    private readonly ResiliencePipeline _resiliencePipeline = new ResiliencePipelineBuilder()
         .AddRetry(new RetryStrategyOptions
         {
             MaxRetryAttempts = 3,
             BackoffType = DelayBackoffType.Exponential,
             Delay = TimeSpan.FromMilliseconds(200),
-            ShouldHandle = new PredicateBuilder()
-                .Handle<AlreadyClosedException>()
-                .Handle<BrokerUnreachableException>()
-                .Handle<IOException>()
-                .Handle<SocketException>(),
+            ShouldHandle = TransientPredicate,
             OnRetry = args =>
             {
                 logger.LogWarning(args.Outcome.Exception,
                     "Publish attempt {AttemptNumber} failed, retrying",
                     args.AttemptNumber);
+                return ValueTask.CompletedTask;
+            }
+        })
+        .AddCircuitBreaker(new CircuitBreakerStrategyOptions
+        {
+            ShouldHandle = TransientPredicate,
+            FailureRatio = 0.5,
+            MinimumThroughput = 5,
+            SamplingDuration = TimeSpan.FromSeconds(30),
+            BreakDuration = TimeSpan.FromSeconds(15),
+            OnOpened = args =>
+            {
+                logger.LogError(args.Outcome.Exception,
+                    "Circuit breaker opened for {BreakDuration}s",
+                    args.BreakDuration.TotalSeconds);
+                return ValueTask.CompletedTask;
+            },
+            OnClosed = _ =>
+            {
+                logger.LogInformation("Circuit breaker closed, resuming normal operations");
+                return ValueTask.CompletedTask;
+            },
+            OnHalfOpened = _ =>
+            {
+                logger.LogInformation("Circuit breaker half-opened, testing with next request");
                 return ValueTask.CompletedTask;
             }
         })
@@ -56,7 +84,7 @@ public class RabbitMqPublisher(
 
         var body = JsonSerializer.SerializeToUtf8Bytes(message);
 
-        await _retryPipeline.ExecuteAsync(async token =>
+        await _resiliencePipeline.ExecuteAsync(async token =>
         {
             await using var lease = await _channelPool.AcquireAsync(token);
             var channel = lease.Channel;

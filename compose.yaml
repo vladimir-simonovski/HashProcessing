@@ -22,6 +22,7 @@
       - "3306:3306"
     volumes:
       - mariadb-data:/var/lib/mysql
+      - ./mariadb/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 10s
@@ -40,7 +41,9 @@
       - ASPNETCORE_Kestrel__Certificates__Default__Path=/https/hashprocessing.api.pfx
       - ASPNETCORE_Kestrel__Certificates__Default__Password=${HTTPS_CERT_PASSWORD:-devpassword}
       - RabbitMQ__HostName=rabbitmq
-      - ConnectionStrings__MariaDb=Server=mariadb;Database=api;User=root;Password=root;
+      - RabbitMQ__UserName=hashprocessing
+      - RabbitMQ__Password=hashprocessing
+      - ConnectionStrings__MariaDb=Server=mariadb;Database=api;User=api_user;Password=api_pass;
     volumes:
       - ./.aspnet/https:/https:ro
     ports:
@@ -51,6 +54,11 @@
         condition: service_healthy
       mariadb:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
   hashprocessing.worker:
     image: hashprocessing.worker
@@ -59,13 +67,21 @@
       dockerfile: HashProcessing.Worker/Dockerfile
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_HTTP_PORTS=8080
       - RabbitMQ__HostName=rabbitmq
-      - ConnectionStrings__MariaDb=Server=mariadb;Database=worker;User=root;Password=root;
+      - RabbitMQ__UserName=hashprocessing
+      - RabbitMQ__Password=hashprocessing
+      - ConnectionStrings__MariaDb=Server=mariadb;Database=worker;User=worker_user;Password=worker_pass;
     depends_on:
       rabbitmq:
         condition: service_healthy
       mariadb:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
 volumes:
   mariadb-data:
