@@ -215,7 +215,8 @@ The API will be available at `http://localhost:5031` (and `https://localhost:709
 |---|---|---|
 | `POST` | `/hashes?count={n}` | Generate SHA-1 hashes (default 40,000, max 1,000,000), batch and publish to RabbitMQ. Returns `202 Accepted`. Rate-limited to 5 req/min. |
 | `GET` | `/hashes` | Return aggregated daily hash counts ordered by date descending. |
-| `GET` | `/health` | Health check endpoint. Returns `200 OK` when the API and its MariaDB connection are healthy. |
+| `GET` | `/health/live` | Liveness probe. Always returns `200 OK` if the process is running. Used by Docker Compose healthcheck. |
+| `GET` | `/health/ready` | Readiness probe. Returns `200 OK` when MariaDB and RabbitMQ are reachable, `503 Service Unavailable` otherwise. |
 
 ### Examples
 
@@ -336,6 +337,10 @@ Multiple layers protect against message loss:
 - **Persistent delivery mode** — all published messages are marked `Persistent = true`, surviving broker restarts
 - **Dead-letter queues** — both `hash-processing` and `hash-daily-counts` queues route nacked messages to per-queue DLQs via a `dlx` direct exchange, declared in `rabbitmq/definitions.json`
 - **Manual acknowledgement** — `autoAck: false` with explicit `BasicAckAsync` on success and `BasicNackAsync` (requeue: false) on failure, routing poison messages to the DLQ
+
+### Liveness / readiness health checks
+
+Health endpoints are split into liveness and readiness probes. `/health/live` always returns 200 — it only confirms the process is running and is what Docker Compose polls. `/health/ready` checks MariaDB (via EF Core `DbContextCheck`) and RabbitMQ (via `AspNetCore.HealthChecks.Rabbitmq`, which verifies `IConnection.IsOpen`). This separation prevents dependency outages from triggering container restarts, since both RabbitMQ (`AutomaticRecoveryEnabled`) and EF Core (`EnableRetryOnFailure`) self-recover from transient failures. The readiness endpoint exists for operational diagnostics and maps directly to a Kubernetes readiness probe if the deployment model changes.
 
 ### ParallelHashGenerator as a benchmark-only alternative
 

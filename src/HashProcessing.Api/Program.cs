@@ -1,6 +1,7 @@
 using HashProcessing.Api.Application;
 using HashProcessing.Api.Infrastructure;
 using JetBrains.Annotations;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 
@@ -32,7 +33,8 @@ builder.Services.AddRateLimiter(options =>
 
 builder.Services
     .AddHealthChecks()
-    .AddDbContextCheck<ApiDbContext>("mariadb");
+    .AddDbContextCheck<ApiDbContext>("mariadb", tags: ["ready"])
+    .AddRabbitMQ(tags: ["ready"]);
 
 builder.Services
     .AddApplication()
@@ -61,7 +63,14 @@ else
 app.UseHttpsRedirection();
 app.UseRateLimiter();
 
-app.MapHealthChecks("/health");
+app.MapHealthChecks("/health/live", new HealthCheckOptions
+{
+    Predicate = _ => false
+});
+app.MapHealthChecks("/health/ready", new HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("ready")
+});
 
 app.MapPost("/hashes", async (uint? count, HttpContext context) =>
     {
