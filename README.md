@@ -86,8 +86,8 @@ Core (Domain)  ←  Application  ←  Infrastructure
 | Layer | Responsibility | Key types |
 |---|---|---|
 | **Core** | Domain entity, repository port | `HashEntity`, `IHashRepository` |
-| **Application** | Use-case handler (CQRS) | `ProcessReceivedHashesCommand`, `ProcessReceivedHashesCommandHandler` |
-| **Infrastructure** | EF Core persistence, RabbitMQ consumer, publisher | `HashDbContext`, `HashRepository`, `RabbitMqHashConsumer`, `RabbitMqPublisher` |
+| **Application** | Use-case handler (CQRS), application service ports | `ProcessReceivedHashesCommand`, `ProcessReceivedHashesCommandHandler`, `IDailyHashCountNotifier` |
+| **Infrastructure** | EF Core persistence, RabbitMQ consumer, daily count notifier | `HashDbContext`, `HashRepository`, `RabbitMqHashConsumer`, `RabbitMqDailyHashCountNotifier` |
 
 **Processing pipeline:**
 
@@ -103,6 +103,7 @@ Worker (4 parallel consumers)
   → HashBatchMessage (contract)          // anti-corruption layer
   → HashEntity (domain)                  // mapper
   → MariaDB hashes table                 // EF Core bulk insert
+  → IDailyHashCountNotifier              // application port
   → RabbitMQ queue "hash-daily-counts"   // publish aggregated count
 
 API (background consumer)

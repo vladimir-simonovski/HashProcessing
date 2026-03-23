@@ -1,6 +1,4 @@
-using HashProcessing.Messaging;
 using HashProcessing.Worker.Core;
-using Microsoft.Extensions.Options;
 
 namespace HashProcessing.Worker.Application;
 
@@ -21,17 +19,12 @@ public class ProcessReceivedHashesCommand
 
 public class ProcessReceivedHashesCommandHandler(
     IHashRepository repository,
-    RabbitMqPublisher publisher,
-    IOptions<WorkerOptions> workerOptions,
+    IDailyHashCountNotifier notifier,
     ILogger<ProcessReceivedHashesCommandHandler> logger)
 {
     private readonly IHashRepository _repository = repository ?? throw new ArgumentNullException(nameof(repository));
-    private readonly RabbitMqPublisher _publisher = publisher ?? throw new ArgumentNullException(nameof(publisher));
+    private readonly IDailyHashCountNotifier _notifier = notifier ?? throw new ArgumentNullException(nameof(notifier));
     private readonly ILogger<ProcessReceivedHashesCommandHandler> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-    private readonly WorkerOptions _workerOptions = (workerOptions ?? throw new ArgumentNullException(nameof(workerOptions))).Value;
-    private string QueueName => _workerOptions.PublishQueueName;
-    private QueueArguments? _queueArguments;
-    private QueueArguments QueueArguments => _queueArguments ??= new QueueArguments { DeadLetterExchange = _workerOptions.DeadLetterExchange };
 
     public async Task HandleAsync(ProcessReceivedHashesCommand command, CancellationToken ct = default)
     {
@@ -40,8 +33,7 @@ public class ProcessReceivedHashesCommandHandler(
         var dates = command.Entities.Select(e => e.Date).Distinct().ToList();
         var countsByDate = await _repository.GetCountsByDatesAsync(dates, ct);
 
-        await Task.WhenAll(countsByDate.Select(x =>
-            _publisher.PublishAsync(new HashDailyCountMessage(x.Key, x.Value), QueueName, QueueArguments, ct)));
+        await _notifier.NotifyDailyHashCountsAsync(countsByDate, ct);
 
         _logger.LogDebug("Persisted batch of {Count} hashes, published daily counts for {DateCount} date(s)",
             command.Entities.Count, countsByDate.Count);

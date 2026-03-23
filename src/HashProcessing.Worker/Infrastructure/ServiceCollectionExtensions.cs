@@ -34,6 +34,7 @@ public static class ServiceCollectionExtensions
                     errorNumbersToAdd: null)));
 
         services.AddScoped<IHashRepository, HashRepository>();
+        services.AddScoped<IDailyHashCountNotifier, RabbitMqDailyHashCountNotifier>();
 
         services.AddSingleton(sp =>
             new RabbitMqHashConsumer(
