@@ -128,7 +128,7 @@ public class RabbitMqBatchedOffloadToWorkerProcessor : IHashProcessor
 
             await _publisher.PublishAsync(hashBatchMessage, _publishQueueName, queueArguments, ct);
 
-            Interlocked.Add(ref publishedCount, (uint)batch.Length);
+            publishedCount += (uint)batch.Length;
         }
 
         return publishedCount;
